@@ -1,0 +1,79 @@
+# --------------------------------------------------------------------------- #
+# Secrets & credentials - NEVER commit. (Ground Rule 2 & 6.)
+# Secrets come only from a secrets manager / environment variables.
+# --------------------------------------------------------------------------- #
+/secrets/
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.keystore
+*.jks
+access_token*
+request_token*
+
+# --------------------------------------------------------------------------- #
+# Data & models - large, regenerable, or sensitive. Raw market data and trained
+# model binaries are never committed (Ground Rule 6).
+#
+# These dir patterns are ANCHORED with a leading "/" on purpose: an unanchored
+# "data/"/"models/" would also match the SOURCE packages src/quant/data/ and
+# src/quant/research/models/, silently excluding them from git and from the
+# gitignore-respecting tools (ruff/black). Anchoring confines them to the
+# repo-root runtime caches they are meant for.
+# --------------------------------------------------------------------------- #
+/data/
+/models/
+/mlruns/
+*.parquet
+*.feather
+*.h5
+*.pkl
+*.joblib
+*.lgb
+*.xgb
+
+# --------------------------------------------------------------------------- #
+# Python
+# --------------------------------------------------------------------------- #
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+/build/
+/dist/
+.venv/
+venv/
+# (no bare "env/": it would match config/env/, the per-environment config dir)
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Note: uv.lock and .python-version ARE committed (reproducible installs +
+# interpreter pin to match CI). .venv/ is not.
+
+# --------------------------------------------------------------------------- #
+# Notebooks
+# --------------------------------------------------------------------------- #
+.ipynb_checkpoints/
+
+# --------------------------------------------------------------------------- #
+# OS / editor
+# --------------------------------------------------------------------------- #
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*~

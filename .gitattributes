@@ -1,0 +1,27 @@
+# Normalize line endings so the repository is deterministic across platforms.
+# All text files are stored with LF in git and checked out as LF everywhere
+# (eol=lf), independent of each developer's core.autocrlf. This keeps Windows,
+# macOS, and Linux byte-identical and stops the mixed-line-ending pre-commit
+# hook (--fix=lf) from churning against git's autocrlf conversion.
+* text=auto eol=lf
+
+# Known binary types: never normalize (would corrupt them). Most are gitignored,
+# but this protects any that are ever added explicitly.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary
+*.parquet binary
+*.feather binary
+*.h5     binary
+*.pkl    binary
+*.joblib binary
+*.lgb    binary
+*.xgb    binary
+*.apk    binary
+*.keystore binary
+*.jks    binary

@@ -1,0 +1,49 @@
+# Pre-commit hooks: lint, format, and type-check before every commit.
+# ruff/black/mypy run as *local* hooks via `uv run`, so they use the exact
+# versions pinned in pyproject.toml / uv.lock - no version drift between the
+# pre-commit hooks, CI, and developers' machines (one source of truth).
+# Requires `uv` on PATH; see README.
+minimum_pre_commit_version: "3.5.0"
+default_install_hook_types: [pre-commit]
+
+repos:
+  # Generic file hygiene (these run in pre-commit's own isolated environments).
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: detect-private-key # belt-and-suspenders against committing secrets
+
+  # Project quality gates, pinned to the project's own dependency versions.
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff (lint + import sort)
+        entry: uv run ruff check --force-exclude --fix
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: black
+        name: black (format)
+        entry: uv run black
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+
+      - id: mypy
+        name: mypy (strict type-check)
+        entry: uv run mypy
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false # mypy checks the whole project per pyproject `files`
+        require_serial: true

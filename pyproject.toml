@@ -1,0 +1,106 @@
+# Project metadata, dependencies, and tooling config for the quant-intraday system.
+# Single source of truth: ruff/black/mypy/pytest all read their config from here,
+# and the same versions are used locally (pre-commit), in CI, and by developers.
+
+[project]
+name = "quant-intraday"
+version = "0.0.0"
+description = "Indian intraday algorithmic trading system for liquid cash equities (MIS, 15-min decision clock) + mobile master-control."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+# Runtime dependencies are intentionally empty at P0.1 (scaffolding only).
+# Each layer adds its own deps in its subtask (e.g. kiteconnect in P1.1,
+# lightgbm in P2.6) so the dependency surface stays auditable and minimal.
+dependencies = []
+
+# Dev tooling lives in a PEP 735 dependency group, installed by `uv sync` by
+# default. These are the quality gates, not runtime requirements.
+[dependency-groups]
+dev = [
+    "ruff>=0.11,<0.12",
+    "black>=24.10",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pre-commit>=4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# src/ layout: the importable package is `quant` under src/.
+[tool.hatch.build.targets.wheel]
+packages = ["src/quant"]
+
+# --------------------------------------------------------------------------- #
+# Ruff - linter + import sorter. Black owns formatting (see [tool.black]); ruff
+# is configured to be black-compatible (same line length, no formatter overlap).
+# --------------------------------------------------------------------------- #
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# A strong-but-practical rule set. Typing is enforced by mypy (strict), so we do
+# not also enable ruff's ANN rules (avoids double-reporting). Docstrings (D) are
+# on, because Ground Rule 5 mandates docstrings on public modules/classes/funcs.
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import ordering)
+    "N",   # pep8-naming
+    "UP",  # pyupgrade (modern syntax)
+    "B",   # flake8-bugbear (likely bugs)
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "PTH", # flake8-use-pathlib (no os.path)
+    "RUF", # ruff-specific rules
+    "D",   # pydocstyle (docstring presence/format)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests document themselves through descriptive names; per-function docstrings
+# are not required there.
+"tests/**" = ["D"]
+
+# --------------------------------------------------------------------------- #
+# Black - the formatter (Ground Rule 7 names ruff+black). Line length matches
+# ruff so the two never fight.
+# --------------------------------------------------------------------------- #
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+# --------------------------------------------------------------------------- #
+# mypy - static typing, strict. "Types are documentation that can't go stale."
+# --------------------------------------------------------------------------- #
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+mypy_path = "src"
+explicit_package_bases = true
+warn_unreachable = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+show_error_codes = true
+pretty = true
+
+# --------------------------------------------------------------------------- #
+# pytest
+# --------------------------------------------------------------------------- #
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+markers = [
+    "integration: cross-module / broker-sandbox tests (deselect with -m 'not integration')",
+    "adversarial: injected-failure safety tests (deselect with -m 'not adversarial')",
+]
