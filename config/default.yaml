@@ -1,0 +1,93 @@
+# Base configuration for the quant-intraday system.
+#
+# Ground Rule 2 (no hard-coding): every tunable lives here and is loaded at runtime.
+# Layering (lowest to highest precedence):
+#   1. this file (default.yaml)
+#   2. config/env/<env>.yaml        (selected by QUANT_ENV: dev | paper | live)
+#   3. QUANT__<section>__<key> environment variables
+#
+# SECRETS ARE NEVER STORED HERE. API keys/tokens come only from the secrets
+# interface (src/quant/core/secrets.py) backed by environment variables.
+#
+# Values are seeded from the blueprint's locked decisions (Part II) and technical
+# reference (Part III). They are validated on load by the schema in core/config.py.
+
+project:
+  name: quant-intraday
+  base_currency: INR
+
+market:
+  exchange: NSE
+  segment: cash_equity            # liquid Indian cash equities
+  product: MIS                    # intraday margin product
+  decision_frequency_minutes: 15  # 15-minute decision clock
+  bar_interval_minutes: 1         # features computed from finer (minute) bars
+  depth_levels: 5                 # 5-level market depth (20-depth not redistributable)
+
+broker:
+  name: kite                      # Zerodha Kite Connect
+  api_base_url: "https://api.kite.trade"
+  login_url: "https://kite.zerodha.com/connect/login"
+  rate_limits:
+    data_requests_per_second: 3
+    order_requests_per_second: 10 # SEBI sub-10-OPS ceiling
+    max_orders_per_day: 2000
+  websocket:
+    mode: full                    # ltp | quote | full (full = 5-level depth + ts)
+    max_instruments_per_connection: 3000
+    max_connections: 3
+
+execution:
+  order_type_preference: limit_near_touch  # prefer LIMIT over MARKET
+  market_protection_percent: 0.0           # mandatory for MARKET/SL-M orders
+  max_orders_per_second: 10                # self-throttle (token bucket)
+  max_modifications_per_order: 25
+  max_slices: 10
+  iceberg_min_value_inr: 100000.0
+  self_square_off_time: "15:15"            # flatten before broker auto-square-off (~15:20)
+
+costs:
+  # Full Indian cost model (rates as fractions of turnover unless noted).
+  brokerage_rate: 0.0003          # 0.03% ...
+  brokerage_cap_inr: 20.0         # ... or flat Rs.20 per order, whichever is lower
+  stt_sell_rate: 0.00025          # 0.025%, sell side
+  exchange_txn_rate: 0.00003      # ~0.003%, per side
+  stamp_duty_buy_rate: 0.00003    # ~0.003%, buy side
+  gst_rate: 0.18                  # 18% on (brokerage + exchange txn charges)
+  sebi_charges_rate: 0.000001     # Rs.10 per crore
+
+slippage:
+  model: depth_aware
+  min_bps: 5.0                    # 0.05%
+  max_bps: 20.0                   # 0.20%
+
+risk:
+  max_daily_loss_pct: 2.0         # daily loss limit -> flatten + halt for the day
+  max_drawdown_pct: 15.0          # drawdown circuit breaker (15-20% budget)
+  risk_per_trade_pct: 0.5         # fixed risk-per-trade cap (0.25-1% of equity)
+  max_position_pct: 10.0          # max exposure per name
+  max_gross_exposure: 1.0         # v1: no leverage (gross <= 1x)
+  max_positions: 10
+  consecutive_loss_limit: 5       # consecutive-loss throttle
+
+sizing:
+  vol_target_annual_pct: 15.0     # portfolio volatility target
+  kelly_fraction: 0.25            # quarter-Kelly (under-bet)
+  max_position_leverage: 1.0      # v1: no leverage
+
+portfolio:
+  method: inverse_vol             # equal_weight | inverse_vol | hrp
+  no_trade_band_pct: 0.5          # turnover control (only trade if target moves enough)
+  max_weight_per_name_pct: 10.0
+  sector_cap_pct: 30.0
+
+storage:
+  data_root: "data"
+  parquet_path: "data/parquet"    # immutable raw archive
+  arctic_uri: "lmdb://data/arctic" # versioned research store
+  redis_url: "redis://localhost:6379/0" # hot/live store
+
+logging:
+  level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  format: json                    # json | text
+  timezone: Asia/Kolkata          # IST timestamps everywhere

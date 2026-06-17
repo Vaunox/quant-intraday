@@ -1,0 +1,7 @@
+# Paper-trading environment overrides (merged on top of default.yaml).
+# Production-like behaviour against live data, but no real capital. Uses a separate
+# Redis logical DB so paper state never collides with anything else.
+logging:
+  level: INFO
+storage:
+  redis_url: "redis://localhost:6379/1"

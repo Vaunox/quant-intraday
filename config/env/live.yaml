@@ -1,0 +1,8 @@
+# Live-trading environment overrides (merged on top of default.yaml).
+# Tighter risk posture than dev/paper; uses a dedicated Redis logical DB.
+logging:
+  level: INFO
+risk:
+  max_daily_loss_pct: 1.5  # stricter daily-loss halt when real capital is at stake
+storage:
+  redis_url: "redis://localhost:6379/2"

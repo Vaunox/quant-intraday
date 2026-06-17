@@ -14,8 +14,8 @@ Updated at the end of every session.
 
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
-| 2026-06-17 | P0.1 Repository & tooling | ☑ done | `feat/p0.1-repo-tooling` (committed; not pushed) | 2 passing (`tests/unit/test_smoke.py`) | uv toolchain; all gates verified green. See session notes below. |
-| | P0.2 Configuration & secrets | ☐ todo | | | Owns the contents of `config/*.yaml`. |
+| 2026-06-17 | P0.1 Repository & tooling | ☑ done | `feat/p0.1-repo-tooling` (pushed to origin) | 2 passing (`tests/unit/test_smoke.py`) | uv toolchain; all gates verified green. See session notes below. |
+| 2026-06-17 | P0.2 Configuration & secrets | ☑ done | `feat/p0.2-config-secrets` | 34 passing (config + secrets) | Layered typed config (pydantic) + `QUANT__*` overrides + secrets interface; 99% cov. See notes. |
 | | P0.3 Logging & audit foundation | ☐ todo | | | |
 | | P0.4 NSE calendar utility | ☐ todo | | | |
 | | P0.5 Domain types & interfaces | ☐ todo | | | |
@@ -178,3 +178,39 @@ Updated at the end of every session.
   No remote exists yet and nothing has been pushed.
 - `gate-0-foundation` tag is **not** applied yet; it comes after P0.5.
 - **Next subtask: P0.2 — Configuration & secrets system.**
+
+### 2026-06-17 — P0.2 Configuration & secrets ☑
+
+**Goal:** layered config loader + secrets interface; zero hard-coding.
+
+**Delivered**
+- `core/config.py` — layered loader: `default.yaml` ← `config/env/<env>.yaml` ←
+  `QUANT__<section>__<key>` env-var overrides; deep-merged and validated into an
+  **immutable, typed pydantic `Config`** (`extra="forbid"` → unknown keys fail loud).
+  Section models seed the blueprint's locked decisions (15-min clock, broker limits,
+  Indian cost model, risk limits, ¼-Kelly, inverse-vol, storage URIs, logging). Plus
+  `load_universe()` → typed `Universe`. Loader is fully DI (`config_dir`, `environ`).
+- `core/secrets.py` — `Secrets` Protocol + `EnvSecrets` (env-backed, `QUANT_SECRET_`
+  prefix). Missing/empty secret raises `MissingSecretError` naming the env var (never
+  the value); `environ` excluded from `repr` so values can't leak.
+- `config/default.yaml`, `config/env/{dev,paper,live}.yaml`, `config/universe.yaml`.
+- Deps: `pydantic`, `pyyaml` (+ `types-PyYAML` dev).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy (strict, 42 files), pre-commit;
+**34 tests pass**; coverage 99% config (only an unreachable defensive raise) / 100% secrets.
+
+**Decisions**
+- **pydantic v2** for the schema: typed access, fail-loud validation, immutability.
+- Safety/compliance invariants encoded as schema constraints: OPS ≤ 10 (SEBI),
+  `max_slices` ≤ 10, `kelly_fraction` ∈ (0,1], `max_gross_exposure` ≤ 5 (default 1.0 =
+  no leverage), slippage `min_bps ≤ max_bps`.
+- Override convention: `QUANT__section__key` (double-underscore nesting, highest
+  precedence); `QUANT_ENV` selects env; `QUANT_CONFIG_DIR` overrides config location.
+- A test asserts **no secret-like keys** in any committed config file (keys parsed,
+  comments ignored) — enforcing "secrets never in config files".
+
+**Follow-ups / notes**
+- Execution/risk/sizing/portfolio config is seeded now (anti-hard-coding) and will be
+  *consumed* by its layer (P3/P4); fields extend per subtask.
+- The logger that reads `logging.*` is **P0.3**.
+- **Next subtask: P0.3 — Logging & audit foundation.**
