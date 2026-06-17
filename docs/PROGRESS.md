@@ -16,7 +16,7 @@ Updated at the end of every session.
 |---|---|---|---|---|---|
 | 2026-06-17 | P0.1 Repository & tooling | ☑ done | `feat/p0.1-repo-tooling` (pushed to origin) | 2 passing (`tests/unit/test_smoke.py`) | uv toolchain; all gates verified green. See session notes below. |
 | 2026-06-17 | P0.2 Configuration & secrets | ☑ done | `feat/p0.2-config-secrets` | 34 passing (config + secrets) | Layered typed config (pydantic) + `QUANT__*` overrides + secrets interface; 99% cov. See notes. |
-| | P0.3 Logging & audit foundation | ☐ todo | | | |
+| 2026-06-17 | P0.3 Logging & audit foundation | ☑ done | `feat/p0.3-logging-audit` | 58 passing (incl. logging + audit) | Structured JSON/text logging (IST, correlation IDs, redaction) + hash-chained append-only audit log; 100% cov both. See notes. |
 | | P0.4 NSE calendar utility | ☐ todo | | | |
 | | P0.5 Domain types & interfaces | ☐ todo | | | |
 | | **GATE 0** | ☐ | | | Tag `gate-0-foundation` after P0.1–P0.5. |
@@ -214,3 +214,37 @@ Updated at the end of every session.
   *consumed* by its layer (P3/P4); fields extend per subtask.
 - The logger that reads `logging.*` is **P0.3**.
 - **Next subtask: P0.3 — Logging & audit foundation.**
+
+### 2026-06-17 — P0.3 Logging & audit foundation ☑
+
+**Goal:** structured logging configured once; append-only audit log interface.
+
+**Delivered**
+- `core/logging.py` — `configure_logging(config)` sets up the root logger once
+  (idempotent) from `config.logging` (level/format/timezone). JSON or text output;
+  **IST timestamps** (zoneinfo + tzdata); **correlation IDs** via a `ContextVar` +
+  `correlation_id_context()` + `CorrelationIdFilter`; **secret redaction** (`Redactor`
+  masks sensitive-named fields and inline token patterns) applied in both formatters.
+  `get_logger(__name__)` everywhere else.
+- `core/audit.py` — `AuditLog` Protocol + `FileAuditLog`: append-only JSONL with a
+  **SHA-256 hash chain** (each entry links to the prior), per-entry seq + IST timestamp
+  + correlation id; secrets redacted on write; `verify()` detects tampering/reordering;
+  chain continues across restarts; thread-safe.
+- Dep: `tzdata` (zoneinfo resolves Asia/Kolkata on any OS).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy (strict, 46 files), pre-commit;
+**58 tests pass**; **100% coverage** on both new modules.
+
+**Decisions**
+- Root logger configured (all modules' logs become structured); idempotent so
+  "configure once" is safe to call again.
+- Redaction is key-name + inline-pattern based (no need to hold secret literals);
+  reused by the audit log.
+- Audit log is hash-chained for tamper-evidence (immutable / SEBI traceability),
+  beyond a plain append-only file; `verify()` tested against data-tamper and seq-break.
+- IST via `zoneinfo` (config-driven), not a hard-coded offset.
+
+**Follow-ups / notes**
+- Alerting on CRITICAL events + secrets-manager wiring are **P5.7** (platform); this is
+  the logging/audit substrate they build on.
+- **Next subtask: P0.4 — NSE calendar utility.**
