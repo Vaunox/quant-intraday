@@ -14,6 +14,7 @@ license = { text = "Proprietary" }
 dependencies = [
     "pydantic>=2.7",  # typed, validated, immutable config schema (P0.2)
     "pyyaml>=6.0",    # YAML config loading (P0.2)
+    "tzdata>=2024.1", # IANA tz database so zoneinfo resolves IST on any OS (P0.3)
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, installed by `uv sync` by
