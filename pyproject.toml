@@ -9,10 +9,12 @@ description = "Indian intraday algorithmic trading system for liquid cash equiti
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
-# Runtime dependencies are intentionally empty at P0.1 (scaffolding only).
-# Each layer adds its own deps in its subtask (e.g. kiteconnect in P1.1,
-# lightgbm in P2.6) so the dependency surface stays auditable and minimal.
-dependencies = []
+# Runtime dependencies grow per subtask so the surface stays auditable and minimal
+# (e.g. kiteconnect in P1.1, lightgbm in P2.6).
+dependencies = [
+    "pydantic>=2.7",  # typed, validated, immutable config schema (P0.2)
+    "pyyaml>=6.0",    # YAML config loading (P0.2)
+]
 
 # Dev tooling lives in a PEP 735 dependency group, installed by `uv sync` by
 # default. These are the quality gates, not runtime requirements.
@@ -24,6 +26,7 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "pre-commit>=4.0",
+    "types-PyYAML>=6.0",  # type stubs for pyyaml (mypy strict)
 ]
 
 [build-system]

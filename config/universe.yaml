@@ -1,0 +1,21 @@
+# Example tradable universe: liquid NSE large-cap cash equities.
+#
+# This is the seed/example universe. The *live* universe is refreshed by the data
+# hygiene + liquidity screen (P1.5) using the eligibility thresholds below; ESM/T2T
+# names are excluded (no intraday trading). Loaded and validated separately from the
+# main config (see core/config.load_universe).
+
+eligibility:
+  min_adv_inr: 500000000.0  # Rs.50 crore minimum average daily traded value
+  max_spread_bps: 5.0       # reject names wider than 5 bps typical spread
+  exclude_esm_t2t: true     # exclude ESM / Trade-to-Trade names
+
+instruments:
+  - { symbol: RELIANCE,  exchange: NSE, name: "Reliance Industries",      sector: Energy }
+  - { symbol: HDFCBANK,  exchange: NSE, name: "HDFC Bank",                sector: Financials }
+  - { symbol: ICICIBANK, exchange: NSE, name: "ICICI Bank",               sector: Financials }
+  - { symbol: INFY,      exchange: NSE, name: "Infosys",                  sector: IT }
+  - { symbol: TCS,       exchange: NSE, name: "Tata Consultancy Services", sector: IT }
+  - { symbol: ITC,       exchange: NSE, name: "ITC",                      sector: FMCG }
+  - { symbol: LT,        exchange: NSE, name: "Larsen & Toubro",          sector: Industrials }
+  - { symbol: AXISBANK,  exchange: NSE, name: "Axis Bank",                sector: Financials }

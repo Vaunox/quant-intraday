@@ -1,0 +1,5 @@
+# Development environment overrides (merged on top of default.yaml).
+# Verbose, human-readable logging for local work.
+logging:
+  level: DEBUG
+  format: text
