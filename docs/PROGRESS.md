@@ -6,7 +6,7 @@ Updated at the end of every session.
 
 **Status:** ◐ in-progress / ☑ done / ☐ todo
 
-**Gates:** Gate 0 ☐ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
+**Gates:** Gate 0 ☑ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
 
 ---
 
@@ -17,9 +17,9 @@ Updated at the end of every session.
 | 2026-06-17 | P0.1 Repository & tooling | ☑ done | `feat/p0.1-repo-tooling` (pushed to origin) | 2 passing (`tests/unit/test_smoke.py`) | uv toolchain; all gates verified green. See session notes below. |
 | 2026-06-17 | P0.2 Configuration & secrets | ☑ done | `feat/p0.2-config-secrets` | 34 passing (config + secrets) | Layered typed config (pydantic) + `QUANT__*` overrides + secrets interface; 99% cov. See notes. |
 | 2026-06-17 | P0.3 Logging & audit foundation | ☑ done | `feat/p0.3-logging-audit` (merged) | 58 passing (incl. logging + audit) | Structured JSON/text logging (IST, correlation IDs, redaction) + hash-chained append-only audit log; 100% cov both. See notes. |
-| 2026-06-17 | P0.4 NSE calendar utility | ☑ done | `feat/p0.4-nse-calendar` | 87 passing (incl. calendar) | IST trading-calendar/session utility (trading days, holidays, session phases); 100% cov. See notes. |
-| | P0.5 Domain types & interfaces | ☐ todo | | | |
-| | **GATE 0** | ☐ | | | Tag `gate-0-foundation` after P0.1–P0.5. |
+| 2026-06-17 | P0.4 NSE calendar utility | ☑ done | `feat/p0.4-nse-calendar` (merged) | 87 passing (incl. calendar) | IST trading-calendar/session utility (trading days, holidays, session phases); 100% cov. See notes. |
+| 2026-06-17 | P0.5 Domain types & interfaces | ☑ done | `feat/p0.5-types-interfaces` | 98 passing (incl. types + interfaces) | Frozen domain types + 6 runtime-checkable Protocols; fakes type-check; 100% cov both. See notes. |
+| 2026-06-17 | **GATE 0** | ☑ **passed** | tag `gate-0-foundation` | whole-package 99% cov | Scaffolding, config/secrets, logging/audit, calendar, contracts — typed, tested, CI green. |
 
 ## Phase 1 — Data & Feature Layer
 
@@ -283,3 +283,38 @@ Updated at the end of every session.
 - ⚠️ Before paper/live: complete `config/nse_holidays.yaml` with the official NSE holiday
   list (festival holidays move yearly); the live universe/hygiene (P1.5) or operator owns this.
 - **Next subtask: P0.5 — Domain types & interfaces (contracts).** Last one before Gate 0.
+
+### 2026-06-17 — P0.5 Domain types & interfaces ☑ (completes Gate 0)
+
+**Goal:** the shared data models and the Protocols every layer implements.
+
+**Delivered**
+- `core/types.py` — immutable, slotted value objects: `Bar`, `Tick`, `DepthLevel`,
+  `DepthSnapshot` (+ `best_bid`/`best_ask`), `OrderRequest`, `Order`
+  (+ `is_complete`/`remaining_quantity`), `Position` (+ `side`/`is_flat`), `Signal`,
+  `RiskDecision`; enums `Side`, `OrderType`, `Product`, `OrderStatus`. Pure carriers
+  (business invariants enforced by the constructing layer; documented).
+- `core/interfaces.py` — `runtime_checkable` Protocols: `BrokerAdapter`, `Repository`,
+  `Model`, `PortfolioConstructor`, `Sizer`, `RiskEngine`.
+- Coverage config: exclude Protocol/type-only stubs (`...`) from reports.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy (strict, 52 files), pre-commit;
+**98 tests pass**; types/interfaces 100% cov; whole-package **99%** (only the one
+unreachable defensive `raise` in config). A trivial fake of each Protocol is statically
+checked (typed assignment → mypy) and runtime-checked (`isinstance`).
+
+**Decisions**
+- Domain types are **frozen + slotted dataclasses** (immutable, hot-path-cheap), not
+  pydantic — market data streams fast and these are pure carriers.
+- All six core Protocols are `runtime_checkable` for fakes; mypy is the authoritative
+  conformance check.
+
+---
+
+## GATE 0 — Foundation: ✅ PASSED (2026-06-17)
+
+Project scaffolding, layered config + secrets, structured logging + append-only audit,
+the NSE calendar, and the core domain types/Protocols all exist — typed, tested, and
+green in CI. Tagged **`gate-0-foundation`**.
+
+**Next: Phase 1 — Data & Feature Layer** (P1.1 — broker adapter + auth/session).

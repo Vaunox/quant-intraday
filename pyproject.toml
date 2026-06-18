@@ -108,3 +108,15 @@ markers = [
     "integration: cross-module / broker-sandbox tests (deselect with -m 'not integration')",
     "adversarial: injected-failure safety tests (deselect with -m 'not adversarial')",
 ]
+
+# --------------------------------------------------------------------------- #
+# coverage.py
+# --------------------------------------------------------------------------- #
+[tool.coverage.report]
+# Lines that are non-executable by design (Protocol/interface stubs, type-only).
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(typing\\.)?overload",
+    "\\.\\.\\.",
+]
