@@ -298,7 +298,7 @@ def _env_overrides(environ: Mapping[str, str], prefix: str = ENV_OVERRIDE_PREFIX
     return overrides
 
 
-def _discover_config_dir(environ: Mapping[str, str]) -> Path:
+def discover_config_dir(environ: Mapping[str, str]) -> Path:
     """Locate the config directory.
 
     Honours ``QUANT_CONFIG_DIR`` if set, otherwise walks up from this file until a
@@ -349,7 +349,7 @@ def load_config(
     """
     environ = os.environ if environ is None else environ
     resolved_env = _resolve_env(env, environ)
-    directory = Path(config_dir) if config_dir is not None else _discover_config_dir(environ)
+    directory = Path(config_dir) if config_dir is not None else discover_config_dir(environ)
 
     merged = _load_yaml_mapping(directory / "default.yaml")
     env_path = directory / "env" / f"{resolved_env}.yaml"
@@ -382,7 +382,7 @@ def load_universe(
         ConfigError: If the universe file cannot be located, parsed, or validated.
     """
     environ = os.environ if environ is None else environ
-    directory = Path(config_dir) if config_dir is not None else _discover_config_dir(environ)
+    directory = Path(config_dir) if config_dir is not None else discover_config_dir(environ)
     data = _load_yaml_mapping(directory / "universe.yaml")
     try:
         return Universe.model_validate(data)

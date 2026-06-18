@@ -16,8 +16,8 @@ Updated at the end of every session.
 |---|---|---|---|---|---|
 | 2026-06-17 | P0.1 Repository & tooling | ☑ done | `feat/p0.1-repo-tooling` (pushed to origin) | 2 passing (`tests/unit/test_smoke.py`) | uv toolchain; all gates verified green. See session notes below. |
 | 2026-06-17 | P0.2 Configuration & secrets | ☑ done | `feat/p0.2-config-secrets` | 34 passing (config + secrets) | Layered typed config (pydantic) + `QUANT__*` overrides + secrets interface; 99% cov. See notes. |
-| 2026-06-17 | P0.3 Logging & audit foundation | ☑ done | `feat/p0.3-logging-audit` | 58 passing (incl. logging + audit) | Structured JSON/text logging (IST, correlation IDs, redaction) + hash-chained append-only audit log; 100% cov both. See notes. |
-| | P0.4 NSE calendar utility | ☐ todo | | | |
+| 2026-06-17 | P0.3 Logging & audit foundation | ☑ done | `feat/p0.3-logging-audit` (merged) | 58 passing (incl. logging + audit) | Structured JSON/text logging (IST, correlation IDs, redaction) + hash-chained append-only audit log; 100% cov both. See notes. |
+| 2026-06-17 | P0.4 NSE calendar utility | ☑ done | `feat/p0.4-nse-calendar` | 87 passing (incl. calendar) | IST trading-calendar/session utility (trading days, holidays, session phases); 100% cov. See notes. |
 | | P0.5 Domain types & interfaces | ☐ todo | | | |
 | | **GATE 0** | ☐ | | | Tag `gate-0-foundation` after P0.1–P0.5. |
 
@@ -248,3 +248,38 @@ Updated at the end of every session.
 - Alerting on CRITICAL events + secrets-manager wiring are **P5.7** (platform); this is
   the logging/audit substrate they build on.
 - **Next subtask: P0.4 — NSE calendar utility.**
+
+### 2026-06-17 — P0.4 NSE calendar utility ☑
+
+**Goal:** authoritative trading-calendar/session utility used everywhere.
+
+**Delivered**
+- `core/calendar.py` — `NSECalendar` (frozen): `is_trading_day` / `is_holiday` /
+  `is_weekend`, `session_open` / `session_close` / `session_bounds`, `phase_at`
+  (CLOSED / PRE_OPEN / REGULAR via the `SessionPhase` enum), `is_open`,
+  `next_` / `previous_trading_day` — all in IST. `phase_at` fails loud on naive
+  datetimes and converts aware ones to IST. Exchange session times (09:00 pre-open,
+  09:15 open, 15:30 close) are named constants (Ground Rule 2). `load_nse_calendar()`
+  loads holidays from `config/nse_holidays.yaml` (DI-friendly).
+- `config/nse_holidays.yaml` — **partial seed** (fixed-date national holidays, 2025–26)
+  with a prominent warning that movable festival holidays MUST be added from the
+  official NSE list before trading.
+- Small refactor: exposed `config.discover_config_dir` (was private) so the calendar
+  reuses config-dir discovery (DRY).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy (strict, 48 files), pre-commit;
+**87 tests pass**; **100% coverage** on calendar.
+
+**Decisions**
+- Calendar is **data-driven** (holidays injected/loaded), keeping `core/` light — no heavy
+  market-calendar library in the foundation; the holiday list is reference data like the
+  universe.
+- **Honesty:** only fixed-date holidays are seeded (no fabricated movable festival dates);
+  the engine is fully tested with injected holidays regardless of seed completeness.
+- Self-square-off (~15:15) stays in config (`execution.self_square_off_time`); this module
+  models exchange session phases only.
+
+**Follow-ups / notes**
+- ⚠️ Before paper/live: complete `config/nse_holidays.yaml` with the official NSE holiday
+  list (festival holidays move yearly); the live universe/hygiene (P1.5) or operator owns this.
+- **Next subtask: P0.5 — Domain types & interfaces (contracts).** Last one before Gate 0.
