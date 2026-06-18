@@ -16,10 +16,39 @@ from enum import Enum
 
 
 class Side(str, Enum):
-    """Trade direction."""
+    """Order side (a placed order is always a buy or a sell).
+
+    Deriving a side from a target-position delta (e.g. a future ``Side.from_delta``) is
+    position-aware and deferred to the capital/execution layer (P3/P4).
+    """
 
     BUY = "buy"
     SELL = "sell"
+
+
+class SignalDirection(str, Enum):
+    """A model signal's directional view: long, short, or flat (no position).
+
+    Distinct from the order :class:`Side` (BUY/SELL). ``FLAT`` is a first-class
+    prediction ("model ran, no edge") and stays distinguishable from the *absence* of a
+    signal ("model didn't run"). The view -> order-side translation is position-dependent
+    (see :meth:`to_target_sign`) and lives in the capital/execution layer (P3/P4).
+    """
+
+    LONG = "long"
+    SHORT = "short"
+    FLAT = "flat"
+
+    def to_target_sign(self) -> int:
+        """Target position sign for this directional view: +1 long, 0 flat, -1 short.
+
+        This is the ONLY pure mapping off direction. The order ``Side`` (BUY/SELL) is
+        deliberately NOT derived here: it is position-dependent - exiting a long is a
+        SELL, covering a short is a BUY, and trimming a long while still long is also a
+        SELL - so it is computed downstream in the capital/execution layer from
+        (target position - current position).
+        """
+        return {SignalDirection.LONG: 1, SignalDirection.FLAT: 0, SignalDirection.SHORT: -1}[self]
 
 
 class OrderType(str, Enum):
@@ -183,13 +212,14 @@ class Position:
 class Signal:
     """A model's view on a symbol at a point in time.
 
-    ``strength`` is a calibrated conviction in ``[0, 1]`` (e.g. a meta-probability);
-    ``asof`` is the decision time (tz-aware IST), and execution happens next bar.
+    ``direction`` is the primary model's call (long / short / flat); ``strength`` is a
+    calibrated conviction in ``[0, 1]`` (e.g. a meta-probability); ``asof`` is the
+    decision time (tz-aware IST), and execution happens next bar.
     """
 
     symbol: str
     asof: datetime
-    side: Side
+    direction: SignalDirection
     strength: float
 
 

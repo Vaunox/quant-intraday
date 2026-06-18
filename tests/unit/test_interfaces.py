@@ -31,6 +31,7 @@ from quant.core.types import (
     RiskDecision,
     Side,
     Signal,
+    SignalDirection,
 )
 
 NOW = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
@@ -141,7 +142,9 @@ def test_fakes_behave() -> None:
     assert FakeRepository().read_bars("X", NOW, NOW).empty
     FakeRepository().write_bars("X", bars_to_frame([]))
     assert FakeModel().predict({"f": 1.0}) == 0.5
-    assert FakePortfolioConstructor().construct([Signal("X", NOW, Side.BUY, 0.6)]) == {"X": 1.0}
+    assert FakePortfolioConstructor().construct([Signal("X", NOW, SignalDirection.LONG, 0.6)]) == {
+        "X": 1.0
+    }
     assert FakeSizer().size("X", 0.1, 100_000.0, 100.0) == 100
     assert FakeSizer().size("X", 0.1, 100_000.0, 0.0) == 0
 

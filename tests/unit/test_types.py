@@ -18,6 +18,7 @@ from quant.core.types import (
     Product,
     Side,
     Signal,
+    SignalDirection,
 )
 
 NOW = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
@@ -93,9 +94,15 @@ def test_position_side_and_flat() -> None:
 
 
 def test_signal() -> None:
-    sig = Signal(symbol="X", asof=NOW, side=Side.SELL, strength=0.8)
-    assert sig.side is Side.SELL
+    sig = Signal(symbol="X", asof=NOW, direction=SignalDirection.SHORT, strength=0.8)
+    assert sig.direction is SignalDirection.SHORT
     assert sig.strength == 0.8
+
+
+def test_signal_direction_to_target_sign() -> None:
+    assert SignalDirection.LONG.to_target_sign() == 1
+    assert SignalDirection.FLAT.to_target_sign() == 0
+    assert SignalDirection.SHORT.to_target_sign() == -1
 
 
 def test_enum_values() -> None:

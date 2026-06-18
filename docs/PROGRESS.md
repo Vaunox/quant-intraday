@@ -346,12 +346,25 @@ gaps found (below).
 **Verification:** ruff, black, mypy strict (54 files), pre-commit; **103 tests**;
 frames/types/interfaces 100% cov.
 
-**Still open (flagged, not yet changed):**
-- **Signal direction:** deep dives 02/03 model the primary signal as long/short/**flat**;
-  our `Signal.side: Side` only has BUY/SELL. Recommend a `SignalDirection` enum
-  (LONG/SHORT/FLAT) — **pending operator decision**.
+**Still open (flagged):**
+- **Signal direction:** ✓ resolved — `SignalDirection` (LONG/SHORT/FLAT) added, distinct
+  from order `Side` (see entry below).
 - Deferred to their own layer (not P0 errors): `OrderRequest` `validity`/`variety`/
   `market_protection` → P4.3; `stream()` on the adapter vs a separate port → P1.1/P1.2;
   `Model` primary/meta split → P2.
 
-**Next:** operator decision on `SignalDirection`, then P1.1 (not started).
+---
+
+### 2026-06-17 — SignalDirection (long/short/flat), distinct from order Side
+
+`core/types.py`: added **`SignalDirection`** (LONG / SHORT / FLAT) with `to_target_sign()`
+(+1 / 0 / -1) as the *only* pure mapping off direction. `Signal` now carries
+`direction: SignalDirection` — a `FLAT` signal is a first-class "model ran, no edge"
+prediction, kept distinct from the *absence* of a signal. Order `Side` (BUY/SELL) is
+unchanged and stays on `OrderRequest`; the **position-aware** direction → (Side, quantity)
+translation (target − current position; a future `Side.from_delta`) is deferred to the
+capital/execution layer (**P3/P4**) — no `Signal`→`Side` mapping exists in core.
+
+**Verification:** ruff, black, mypy strict (54 files), pre-commit; **104 tests**; types 100% cov.
+
+**Next:** **P1.1** (broker adapter + auth/session) — awaiting operator go.
