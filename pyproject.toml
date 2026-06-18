@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.7",  # typed, validated, immutable config schema (P0.2)
     "pyyaml>=6.0",    # YAML config loading (P0.2)
     "tzdata>=2024.1", # IANA tz database so zoneinfo resolves IST on any OS (P0.3)
+    "pandas>=2.2",    # bulk time-series bars cross boundaries as DataFrames (P0.5 hybrid)
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, installed by `uv sync` by
@@ -27,7 +28,8 @@ dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
     "pre-commit>=4.0",
-    "types-PyYAML>=6.0",  # type stubs for pyyaml (mypy strict)
+    "types-PyYAML>=6.0",   # type stubs for pyyaml (mypy strict)
+    "pandas-stubs>=2.2",   # type stubs for pandas (mypy strict)
 ]
 
 [build-system]

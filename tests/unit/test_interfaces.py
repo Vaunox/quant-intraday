@@ -8,6 +8,9 @@ runtime check.
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 
+import pandas as pd
+
+from quant.core.frames import bars_to_frame
 from quant.core.interfaces import (
     BrokerAdapter,
     Model,
@@ -18,6 +21,7 @@ from quant.core.interfaces import (
 )
 from quant.core.types import (
     Bar,
+    Margins,
     Order,
     OrderRequest,
     OrderStatus,
@@ -46,8 +50,8 @@ SAMPLE_REQUEST = OrderRequest(symbol="X", side=Side.BUY, quantity=1, order_type=
 class FakeBroker:
     def fetch_historical(
         self, symbol: str, start: datetime, end: datetime, interval: str
-    ) -> Sequence[Bar]:
-        return [Bar("X", NOW, 1.0, 1.0, 1.0, 1.0, 1)]
+    ) -> pd.DataFrame:
+        return bars_to_frame([Bar("X", NOW, 1.0, 1.0, 1.0, 1.0, 1)])
 
     def place_order(self, request: OrderRequest) -> str:
         return SAMPLE_ORDER.order_id
@@ -67,13 +71,16 @@ class FakeBroker:
     def get_positions(self) -> Sequence[Position]:
         return []
 
+    def margins(self) -> Margins:
+        return Margins(available_cash=1.0, available_margin=1.0, used_margin=0.0, net=1.0)
+
 
 class FakeRepository:
-    def write_bars(self, symbol: str, bars: Sequence[Bar]) -> None:
+    def write_bars(self, symbol: str, bars: pd.DataFrame) -> None:
         return None
 
-    def read_bars(self, symbol: str, start: datetime, end: datetime) -> Sequence[Bar]:
-        return []
+    def read_bars(self, symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
+        return bars_to_frame([])
 
     def list_symbols(self) -> Sequence[str]:
         return ["X"]
@@ -128,10 +135,11 @@ def test_fakes_behave() -> None:
     broker.cancel_order("O1")
     assert list(broker.get_orders()) == [SAMPLE_ORDER]
     assert broker.get_positions() == []
+    assert broker.margins().net == 1.0
 
     assert FakeRepository().list_symbols() == ["X"]
-    assert FakeRepository().read_bars("X", NOW, NOW) == []
-    FakeRepository().write_bars("X", [])
+    assert FakeRepository().read_bars("X", NOW, NOW).empty
+    FakeRepository().write_bars("X", bars_to_frame([]))
     assert FakeModel().predict({"f": 1.0}) == 0.5
     assert FakePortfolioConstructor().construct([Signal("X", NOW, Side.BUY, 0.6)]) == {"X": 1.0}
     assert FakeSizer().size("X", 0.1, 100_000.0, 100.0) == 100

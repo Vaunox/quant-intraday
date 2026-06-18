@@ -199,3 +199,17 @@ class RiskDecision:
 
     approved: bool
     reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Margins:
+    """A typed snapshot of account margins (the broker's margins call).
+
+    Used by the pre-open gate (margin sufficiency + peak-margin buffer) and sizing.
+    All amounts are in the account's base currency (INR).
+    """
+
+    available_cash: float
+    available_margin: float
+    used_margin: float
+    net: float

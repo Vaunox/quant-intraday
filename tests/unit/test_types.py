@@ -9,6 +9,7 @@ from quant.core.types import (
     Bar,
     DepthLevel,
     DepthSnapshot,
+    Margins,
     Order,
     OrderRequest,
     OrderStatus,
@@ -107,3 +108,12 @@ def test_types_are_immutable() -> None:
     bar = Bar(symbol="X", timestamp=NOW, open=1.0, high=2.0, low=0.5, close=1.5, volume=100)
     with pytest.raises(FrozenInstanceError):
         bar.close = 2.0  # type: ignore[misc]
+
+
+def test_margins() -> None:
+    margins = Margins(
+        available_cash=50_000.0, available_margin=80_000.0, used_margin=20_000.0, net=100_000.0
+    )
+    assert margins.available_cash == 50_000.0
+    assert margins.used_margin == 20_000.0
+    assert margins.net == 100_000.0
