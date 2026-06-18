@@ -1,0 +1,23 @@
+# NSE trading holidays (full-day market closures), consumed by core/calendar.py.
+#
+# ⚠️  PARTIAL SEED — fixed-date national holidays only.
+# The movable festival holidays (Holi, Mahashivratri, Ram Navami, Mahavir Jayanti,
+# Good Friday, Id-ul-Fitr, Bakri Id, Muharram, Ganesh Chaturthi, Dussehra,
+# Diwali/Lakshmi Pujan, Gurunanak Jayanti, etc.) and any special/muhurat sessions
+# change every year and are NOT listed here. Before paper/live trading, this file
+# MUST be completed from the official NSE holiday list for the relevant year.
+# (Dates that fall on a weekend are already non-trading; listing them is harmless.)
+#
+# Format: a list of ISO dates (YYYY-MM-DD).
+
+holidays:
+  # 2025
+  - 2025-01-26   # Republic Day
+  - 2025-08-15   # Independence Day
+  - 2025-10-02   # Gandhi Jayanti
+  - 2025-12-25   # Christmas
+  # 2026
+  - 2026-01-26   # Republic Day
+  - 2026-08-15   # Independence Day
+  - 2026-10-02   # Gandhi Jayanti
+  - 2026-12-25   # Christmas
