@@ -318,3 +318,40 @@ the NSE calendar, and the core domain types/Protocols all exist — typed, teste
 green in CI. Tagged **`gate-0-foundation`**.
 
 **Next: Phase 1 — Data & Feature Layer** (P1.1 — broker adapter + auth/session).
+
+---
+
+### 2026-06-17 — Post-Gate-0 audit + hybrid data contracts (amends P0.5)
+
+**Why:** before starting P1.1, audited all of Phase 0 against deep dives 01–05 and
+amended the P0.5 data contracts to the deep-dive "hybrid" shape.
+
+**Audit result (P0.1–P0.5 vs deep dives):** verified correct — cost-model rates
+([02 §4b.6]), risk/sizing limits + Kelly ([03 §6]), the order state machine and order
+types/product, which correctly exclude the discontinued CO/BO ([04 §7.1–7.2]), session
+times/IST ([01 §1.3]), and the secrets/audit/logging discipline ([05]). Two contract
+gaps found (below).
+
+**Amendment delivered (`refactor/p0.5-hybrid-data-contracts`):**
+- **Hybrid bar representation:** bulk time-series cross boundaries as a pandas
+  `DataFrame`; single events stay typed. `BrokerAdapter.fetch_historical` and
+  `Repository.read_bars`/`write_bars` now return/accept `pd.DataFrame`; `core/frames.py`
+  is the single bridge (`bars_to_frame`/`frame_to_bars` + `BAR_COLUMNS` derived from
+  `Bar` so the schema can't drift). Keeps the money/event path typed; gives research the
+  pandas it wants.
+- Added typed **`Margins`** + `BrokerAdapter.margins()` (pre-open gate + sizing; matches
+  the deep-dive `BrokerAdapter`).
+- `pandas` is now a `core` dependency (deliberate — foundational for a quant system).
+
+**Verification:** ruff, black, mypy strict (54 files), pre-commit; **103 tests**;
+frames/types/interfaces 100% cov.
+
+**Still open (flagged, not yet changed):**
+- **Signal direction:** deep dives 02/03 model the primary signal as long/short/**flat**;
+  our `Signal.side: Side` only has BUY/SELL. Recommend a `SignalDirection` enum
+  (LONG/SHORT/FLAT) — **pending operator decision**.
+- Deferred to their own layer (not P0 errors): `OrderRequest` `validity`/`variety`/
+  `market_protection` → P4.3; `stream()` on the adapter vs a separate port → P1.1/P1.2;
+  `Model` primary/meta split → P2.
+
+**Next:** operator decision on `SignalDirection`, then P1.1 (not started).

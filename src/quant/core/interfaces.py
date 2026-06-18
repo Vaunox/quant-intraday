@@ -17,7 +17,9 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from quant.core.types import Bar, Order, OrderRequest, Position, RiskDecision, Signal
+import pandas as pd
+
+from quant.core.types import Margins, Order, OrderRequest, Position, RiskDecision, Signal
 
 
 @runtime_checkable
@@ -26,8 +28,12 @@ class BrokerAdapter(Protocol):
 
     def fetch_historical(
         self, symbol: str, start: datetime, end: datetime, interval: str
-    ) -> Sequence[Bar]:
-        """Fetch historical OHLCV bars for ``symbol`` within ``[start, end]``."""
+    ) -> pd.DataFrame:
+        """Fetch historical OHLCV bars for ``symbol`` within ``[start, end]``.
+
+        Returns a DataFrame in the canonical bars schema
+        (:data:`quant.core.frames.BAR_COLUMNS`) - bulk series are pandas, by design.
+        """
         ...
 
     def place_order(self, request: OrderRequest) -> str:
@@ -54,17 +60,21 @@ class BrokerAdapter(Protocol):
         """Return current open positions."""
         ...
 
+    def margins(self) -> Margins:
+        """Return the account's current margin snapshot."""
+        ...
+
 
 @runtime_checkable
 class Repository(Protocol):
     """Abstraction over the storage tier for time-series bars."""
 
-    def write_bars(self, symbol: str, bars: Sequence[Bar]) -> None:
-        """Persist ``bars`` for ``symbol`` (idempotent on re-write)."""
+    def write_bars(self, symbol: str, bars: pd.DataFrame) -> None:
+        """Persist a bars DataFrame for ``symbol`` (idempotent on re-write)."""
         ...
 
-    def read_bars(self, symbol: str, start: datetime, end: datetime) -> Sequence[Bar]:
-        """Read bars for ``symbol`` within ``[start, end]`` in time order."""
+    def read_bars(self, symbol: str, start: datetime, end: datetime) -> pd.DataFrame:
+        """Read a bars DataFrame for ``symbol`` within ``[start, end]`` in time order."""
         ...
 
     def list_symbols(self) -> Sequence[str]:
