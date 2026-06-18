@@ -14,6 +14,7 @@ This file is the operating manual for the build. Work it **top to bottom, one su
 
 **Rules of engagement for the whole build:**
 - Do **one subtask per session.** Finish its acceptance criteria before moving on.
+- Before each subtask, **read its referenced deep dive and cite it** per Ground Rule 9.
 - **Respect dependencies and phase gates.** Do not start a phase until the previous phase's gate passes. The gates exist for safety, not bureaucracy.
 - **Update the Progress Log (Part V)** at the end of each session.
 - Claude **cannot and must not**: compile/sign the production APK, run the live trading system, hold broker credentials or signing keys, or place real orders. Those belong to the human operator. Claude **asks for explicit confirmation** before any step that would touch real money, real credentials, or place real orders.
@@ -180,6 +181,7 @@ These are domain safety rules. They override convenience and "just make it work.
 6. **SEBI compliance is non-negotiable.** Stay a sub-10-OPS white-box personal user: ≤10 orders/second (self-throttled), static-IP order placement, daily manual auth seed, market protection on market/SL-M orders, every order strategy-tagged. Exclude ESM/T2T names (no intraday trading).
 7. **Honesty about outcomes.** "High stable profit" is not a goal and is not promised. Over 90% of retail F&O traders lose money — that is the operating reality. The achievable target is a positive-expectancy, risk-controlled system with a small, decaying edge that is continuously re-mined. The system must be able to fail and to stop.
 8. **Build in dependency order; respect the gates.** Do not proceed past a failed gate.
+9. **Ground every decision in the reference docs, and cite them.** Before building a subtask, read its Reference pointer — the relevant Part III section and the corresponding docs/deep_dives/NN document — and treat those as the source of truth. Ground every non-trivial design decision in the deep dives, Part III, and these Ground Rules rather than in general knowledge, and cite the specific section it is based on (e.g. "Deep Dive #2 §3.4") in your notes and PR so the reasoning is auditable. If the docs are silent on a decision, or conflict with the blueprint or the existing code, STOP and surface it to the operator with options — do not guess, and do not patch around it.
 
 ---
 
