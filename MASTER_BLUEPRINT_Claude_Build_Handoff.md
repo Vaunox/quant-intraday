@@ -803,11 +803,12 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 | 2026-06-17 | P0.1 | ☑ done | `feat/p0.1-repo-tooling` (merged) | 2 passing | uv toolchain; ruff/black/mypy/pytest/pre-commit all green. Details in `docs/PROGRESS.md`. |
 | 2026-06-17 | P0.2 | ☑ done | `feat/p0.2-config-secrets` (merged) | 34 passing | Layered typed config (pydantic) + env-var overrides + secrets interface; 99% cov. |
 | 2026-06-17 | P0.3 | ☑ done | `feat/p0.3-logging-audit` (merged) | 58 passing | Structured logging (IST, correlation IDs, redaction) + hash-chained append-only audit log; 100% cov. |
-| 2026-06-17 | P0.4 | ☑ done | `feat/p0.4-nse-calendar` | 87 passing | IST trading-calendar/session utility (trading days, holidays, session phases); 100% cov. |
-| | P0.5 | ☐ todo | | | next |
+| 2026-06-17 | P0.4 | ☑ done | `feat/p0.4-nse-calendar` (merged) | 87 passing | IST trading-calendar/session utility (trading days, holidays, session phases); 100% cov. |
+| 2026-06-17 | P0.5 | ☑ done | `feat/p0.5-types-interfaces` | 98 passing | Frozen domain types + 6 runtime-checkable Protocols; fakes type-check; 100% cov. |
+| 2026-06-17 | **GATE 0** | ☑ **passed** (tag `gate-0-foundation`) | | 99% cov | Foundation complete; CI green. Next: P1.1. |
 | | … | | | | |
 
-**Gate status:** Gate 0 ☐ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
+**Gate status:** Gate 0 ☑ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
 
 ---
 
