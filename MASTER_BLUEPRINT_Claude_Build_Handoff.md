@@ -225,6 +225,32 @@ An automated system that trades **liquid Indian cash equities intraday (MIS)** o
 | App stack | PWA → APK (Bubblewrap/TWA); Flutter later | Single codebase, fastest; native push later |
 | Language/tooling | Python; ruff+black, mypy, pytest, pre-commit, CI | Standard, proven |
 
+## Environment policy (research vs engine)
+
+The project uses **two separate Python environments, by design** — to keep the production
+engine's dependencies clean while letting the research/notebook side pin differently when
+an optional backend (e.g. ArcticDB, which currently requires `pandas<3`) demands it:
+
+- **Engine environment** (the default uv env for `src/quant/`): tracks current pandas
+  (3.x) and the minimum runtime deps for live operation. Optional backends are **not**
+  installed here. This is what runs the daily lifecycle, OMS, monitoring, control API.
+- **Research environment** (a separate uv env, e.g. `.venv-research/`, used for
+  `notebooks/` and the `research/labeling/validation` packages): may pin `pandas<3` and
+  install optional backends like `arcticdb` for versioned dataset workflows. Never
+  imported by the engine.
+
+**Rule:** storage backends live behind the `Repository` interface (Deep Dive #1 §1.2).
+The engine never depends on an optional backend; the research env may. If a backend's
+constraints would force a project-wide pin (e.g. `pandas<3` everywhere), **do not apply
+it** — either keep the backend operator-installed in the research env, or swap to a
+compatible alternative behind the same interface (e.g. QuestDB) per the deep dive.
+Repository abstractions exist precisely so storage choices don't dictate to the rest of
+the codebase.
+
+This policy is referenced by the dependency choices in **P1.3** (Parquet + Redis in the
+base engine deps; ArcticDB operator-installed in research) and should guide every future
+"should I add this dep?" decision.
+
 ---
 
 # PART III — TECHNICAL REFERENCE (distilled from the six deep dives)
