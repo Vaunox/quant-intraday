@@ -6,7 +6,7 @@ validated rigorously against overfitting, sized conservatively under hard, un-ov
 risk limits, executed via the Zerodha Kite Connect API, monitored for drift, and
 controllable from a secure mobile master-control app.
 
-> **Status:** Phase 0 (Foundation). Subtask **P0.1 — Repository & tooling: ✅ done.**
+> **Status:** Phase 1 (Data & Feature Layer) in progress — Gate 0 ✅ passed.
 > See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the live build log.
 
 > **Reality check.** Over 90% of retail F&O traders lose money. "High stable profit" is
@@ -33,6 +33,22 @@ uv run pre-commit install    # enable the git pre-commit hooks
 ```
 
 `uv sync` is reproducible: it installs the exact versions from [`uv.lock`](uv.lock).
+
+### Optional storage backends
+
+The storage layer has three tiers behind one `Repository` interface. The **Parquet**
+raw archive (cold) works out of the box (`pyarrow` is a base dependency). The richer
+tiers are optional:
+
+```bash
+uv sync --extra redis                 # hot/live store (RedisLiveStore)
+pip install "arcticdb>=5,<7"          # versioned research store — REQUIRES a pandas<3 env
+```
+
+`arcticdb` pins `pandas<3`, so it is intentionally **not** a declared dependency (it
+would pull the whole project's pandas back to 2.x); install it ad hoc in a dedicated
+environment, or swap the warm tier for QuestDB later — the `Repository` interface makes
+that a clean swap. All three tiers are fully unit-tested without either backend installed.
 
 ## Quality gates
 

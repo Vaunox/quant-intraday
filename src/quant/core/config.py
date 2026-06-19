@@ -186,12 +186,24 @@ class PortfolioConfig(_Section):
 
 
 class StorageConfig(_Section):
-    """Storage tier locations (paths/URIs)."""
+    """Storage tier locations and tuning (Layer 1, P1.3).
+
+    Three tiers behind the ``Repository`` interface: an immutable Parquet raw archive
+    (cold), a versioned ArcticDB research store (warm), and a Redis hot/live store.
+    """
 
     data_root: str
     parquet_path: str
     arctic_uri: str
+    arctic_library: str = "bars"  # ArcticDB library name for the bars dataset
     redis_url: str
+    redis_key_prefix: str = "quant"  # namespaces this system's keys in a shared Redis
+    # Hot-tier rolling window: the live store keeps only the most recent N bars per
+    # symbol (a bounded, fast cache for live decisions), trimming older ones on write.
+    live_max_bars_per_symbol: int = Field(default=1000, gt=0)
+    # Optional Redis TTL on each symbol's key (seconds); 0 disables time-based expiry
+    # and retention is by count only.
+    live_ttl_seconds: int = Field(default=0, ge=0)
 
 
 class LoggingConfig(_Section):

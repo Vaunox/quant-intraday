@@ -17,6 +17,20 @@ dependencies = [
     "tzdata>=2024.1",      # IANA tz database so zoneinfo resolves IST on any OS (P0.3)
     "pandas>=2.2",         # bulk time-series bars cross boundaries as DataFrames (P0.5 hybrid)
     "kiteconnect>=4.2,<6", # Zerodha Kite Connect SDK, confined to data/brokers/ (P1.1)
+    "pyarrow>=16",         # Parquet engine for the immutable raw archive tier (P1.3)
+]
+
+# Optional storage backends, confined to data/store/ and imported lazily (P1.3).
+# Installed on demand by the operator, e.g. `uv sync --extra redis`.
+#
+# arcticdb (the versioned research tier) is deliberately NOT declared here: it pins
+# `pandas<3` and would drag the whole project's locked pandas down from 3.x. Install
+# it ad hoc in a pandas<3 environment (`pip install "arcticdb>=5,<7"`) — or swap the
+# warm tier for QuestDB later; the `Repository` interface makes that a clean swap.
+# Either way the repository logic is fully unit-tested here against a fake library.
+[project.optional-dependencies]
+redis = [
+    "redis>=5",            # hot/live store client (RedisLiveStore); no pandas constraint
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, installed by `uv sync` by
@@ -104,6 +118,13 @@ pretty = true
 # confined to data/brokers/ and fronted by our own KiteClient Protocol).
 [[tool.mypy.overrides]]
 module = ["kiteconnect.*"]
+ignore_missing_imports = true
+
+# Optional storage backends are not installed in the default (CI) environment, and
+# their use is confined to data/store/ behind our own narrow Protocols. Treat them as
+# untyped so a CI without them installed still type-checks the lazy factory shims.
+[[tool.mypy.overrides]]
+module = ["arcticdb.*", "redis.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- #

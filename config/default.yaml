@@ -87,9 +87,13 @@ portfolio:
 
 storage:
   data_root: "data"
-  parquet_path: "data/parquet"    # immutable raw archive
-  arctic_uri: "lmdb://data/arctic" # versioned research store
+  parquet_path: "data/parquet"          # immutable raw archive (cold), symbol/date partitions
+  arctic_uri: "lmdb://data/arctic"      # versioned research store (warm)
+  arctic_library: "bars"                # ArcticDB library holding the bars dataset
   redis_url: "redis://localhost:6379/0" # hot/live store
+  redis_key_prefix: "quant"             # key namespace within a shared Redis
+  live_max_bars_per_symbol: 1000        # hot-tier rolling window kept per symbol
+  live_ttl_seconds: 0                   # 0 = retain by count only (no Redis TTL)
 
 logging:
   level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL

@@ -27,7 +27,7 @@ Updated at the end of every session.
 |---|---|---|---|---|---|
 | 2026-06-19 | P1.1 Broker adapter + auth/session | ☑ done | `feat/p1.1-broker-adapter` | 54 new (158 total) | `KiteAdapter` behind `BrokerAdapter` (historical market data + daily session seam); `kiteconnect` SDK confined to `data/brokers/`; token-bucket rate limiter; 100% cov on the package. See notes. |
 | 2026-06-19 | P1.2 Live stream consumer | ☑ done | `feat/p1.2-live-stream` | 27 new (185 total) | `TickStreamConsumer` (full-mode ticks + 5-depth → `MarketUpdate` queue; resubscribe-on-reconnect; staleness heartbeat) behind a `TickerTransport` Protocol; `KiteTickerTransport` (SDK) confined to `data/brokers/`; 100% cov on new modules. See notes. |
-| | P1.3 Storage layer | ☐ todo | | | |
+| 2026-06-20 | P1.3 Storage layer | ☑ done | `feat/p1.3-storage-layer` | 82 new (267 total) | Three tiers behind `Repository`: `ParquetArchive` (immutable raw, symbol/date partitions; real+tested), `ArcticRepository` (versioned research; time-travel reads), `RedisLiveStore` (bounded recent-bars hot store). Optional clients (`arcticdb`/`redis`) confined to `data/store/` + lazy; arcticdb pins pandas<3 → not a declared dep. 100% cov on new modules. See notes. |
 | | P1.4 Historical backfill job | ☐ todo | | | |
 | | P1.5 Data hygiene jobs | ☐ todo | | | |
 | | P1.6 Feature library: core + dual-path harness | ☐ todo | | | |
@@ -498,3 +498,92 @@ pre-commit (12 hooks); **185 tests pass** (27 new); **100% coverage** on
   monitoring (**P5.3**); P1.2 detects + warns only.
 
 **Next subtask: P1.3 — Storage layer.**
+
+### 2026-06-20 — P1.3 Storage layer ☑
+
+**Goal:** the `Repository` interface + the three tiered implementations, all swappable
+behind the one interface so the rest of the system never sees a concrete store.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §1.2 (the three-tier design — Redis hot →
+ArcticDB warm/versioned → Parquet cold/immutable; "partition raw archives by
+`symbol/date` and keep them immutable and versioned … corrections become new versions";
+"storage is behind a repository interface", swappable to QuestDB later) and the §"What
+I'd build" `store/` spec (`Repository` + `ParquetArchive` + `ArcticRepository` +
+`RedisLiveStore`). ArcticDB `Library` API (`Arctic(uri)` → `get_library(create_if_missing)`
+→ `write(prune_previous_versions=False)` / `read(as_of=…)` → `VersionedItem.data/.version`
+/ `list_versions` / `has_symbol`) verified via context7.
+
+**Delivered (`src/quant/data/store/`):**
+- `serde.py` — the one place that validates the canonical bars schema
+  (`ensure_bars_schema`), orders/sorts/range-filters (`sort_bars`,
+  `restrict_to_range`, inclusive), (de)serializes via Parquet bytes
+  (`to_parquet_bytes`/`from_parquet_bytes` — verified dtype-exact round-trip, reused by
+  both the Parquet and Redis tiers), and compares content order-insensitively
+  (`frames_equal`). Schema source of truth stays `core.frames.BAR_COLUMNS`.
+- `parquet.py` — `ParquetArchive` (a `Repository`): immutable raw archive,
+  Hive-partitioned `symbol=<S>/date=<YYYY-MM-DD>/bars.parquet` by **IST** trading day;
+  atomic temp-then-replace writes; **idempotent** identical re-write, **immutable**
+  conflicting overwrite → `ImmutableArchiveError`; range reads prune partitions then
+  filter precisely. Real (pyarrow), fully round-trip tested. `create_parquet_archive`.
+- `arctic.py` — `ArcticRepository` (a `Repository`) over a narrow `ArcticLibrary`
+  Protocol: every changed write is a new version; identical re-write is a no-op (no
+  version bloat); `read_bars_version` + `list_versions` + `latest_version` give
+  point-in-time time travel. `open_arctic_library`/`create_arctic_repository` are the
+  single, lazy `arcticdb` import site.
+- `redis_store.py` — `RedisLiveStore` (a `Repository`) over a narrow `RedisClient`
+  Protocol: a bounded rolling window (newest `live_max_bars_per_symbol`) per symbol,
+  de-duped by timestamp (incoming wins), optional Redis TTL; `create_redis_client`/
+  `create_redis_live_store` are the single, lazy `redis` import site.
+- `errors.py` — `StorageError` + `SchemaError` / `ImmutableArchiveError` /
+  `VersionNotFoundError` / `OptionalDependencyError` (Ground Rule 7).
+- `core/config.py` + `config/default.yaml` — `StorageConfig` gains `arctic_library`,
+  `redis_key_prefix`, `live_max_bars_per_symbol` (>0), `live_ttl_seconds` (≥0), all
+  config-driven (Ground Rule 2).
+- `pyproject.toml` — `pyarrow` runtime dep (Parquet engine); `redis` optional extra;
+  `arcticdb`/`redis` added to mypy `ignore_missing_imports` (absent in CI).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (84 files),
+pre-commit (12 hooks); **267 tests pass (82 new)**; **100% coverage** on all five
+`data/store/` modules. `uv lock --check` + `uv sync --frozen` clean (pandas stays 3.0.3).
+A `test_store_confinement.py` (AST-based) fails CI on any `arcticdb`/`redis` import
+outside `data/store/`; a parametrized `test_store_repository_contract.py` runs the same
+`Repository` contract across all three tiers (the swappability proof).
+
+**Decisions**
+- **All three tiers implement the existing `Repository`** (bars). The hot tier keeps a
+  bounded recent-bars window (the "live" flavor); tick-level buffering / wiring the P1.2
+  consumer→store is deferred (needs tick→bar aggregation, a later pass).
+- **`arcticdb` is NOT a declared dependency.** It pins `pandas<3` and would drag the
+  whole project's locked pandas down from 3.x (verified: `uv pip install --dry-run
+  arcticdb` ⇒ pandas 3.0.3 → 2.3.3). It is operator-installed in a pandas<3 environment
+  (or swap the warm tier for QuestDB — the `Repository` interface makes that clean).
+  `redis` is a safe optional extra (no pandas constraint). Parquet (pyarrow) is the
+  always-installed baseline — Deep Dive #1: "Parquet … perfectly adequate to start."
+- **Optional clients confined + lazy + faked**, exactly like the P1.1 `kiteconnect`
+  pattern: narrow Protocols (`ArcticLibrary`, `RedisClient`), one lazy `create_*` import
+  site each, repository logic fully tested against fakes (no install, no server). Only
+  the post-import construction lines are `# pragma: no cover`; the missing-dependency
+  path (→ `OptionalDependencyError`) **is** tested (it is reachable in CI, where the
+  clients are absent), skipping only where a client happens to be installed.
+- **One serializer for Parquet files and Redis values** (Parquet bytes via pyarrow),
+  so dtypes round-trip identically across tiers and the archive immutability check
+  compares apples to apples.
+
+**Bug caught & fixed (root cause, not a workaround — Ground Rule 4)**
+- A method named `set` (to match `redis.Redis.set`) shadowed the builtin `set` inside
+  the class body, so a sibling annotation `set[bytes]` evaluated the *method* and raised
+  `TypeError: 'function' object is not subscriptable` at import. Fixed by typing those
+  returns as the abstract `collections.abc.Set[bytes]` (the codebase's idiom for abc
+  types), which resolves to the module global, not the shadowing method.
+
+**Follow-ups / notes (deferred, tracked)**
+- **Multi-year paginated/resumable backfill → P1.4** writes through these tiers.
+- **Wiring the live consumer → `RedisLiveStore`** (tick→bar aggregation) lands with the
+  feature/ingest path (P1.6-ish); P1.3 provides the store, not the aggregation.
+- ⚠️ Operator, to use the optional tiers: `uv sync --extra redis` for the hot store;
+  `pip install "arcticdb>=5,<7"` in a **pandas<3** env for the versioned research store.
+- Parquet range reads prune by IST date then filter precisely; if a single symbol grows
+  to many years of partitions, a future optimization is a DatetimeIndex + arcticdb-native
+  `date_range` (perf only, with evidence — Ground Rule 7).
+
+**Next subtask: P1.4 — Historical backfill job.**
