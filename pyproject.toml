@@ -12,10 +12,11 @@ license = { text = "Proprietary" }
 # Runtime dependencies grow per subtask so the surface stays auditable and minimal
 # (e.g. kiteconnect in P1.1, lightgbm in P2.6).
 dependencies = [
-    "pydantic>=2.7",  # typed, validated, immutable config schema (P0.2)
-    "pyyaml>=6.0",    # YAML config loading (P0.2)
-    "tzdata>=2024.1", # IANA tz database so zoneinfo resolves IST on any OS (P0.3)
-    "pandas>=2.2",    # bulk time-series bars cross boundaries as DataFrames (P0.5 hybrid)
+    "pydantic>=2.7",       # typed, validated, immutable config schema (P0.2)
+    "pyyaml>=6.0",         # YAML config loading (P0.2)
+    "tzdata>=2024.1",      # IANA tz database so zoneinfo resolves IST on any OS (P0.3)
+    "pandas>=2.2",         # bulk time-series bars cross boundaries as DataFrames (P0.5 hybrid)
+    "kiteconnect>=4.2,<6", # Zerodha Kite Connect SDK, confined to data/brokers/ (P1.1)
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, installed by `uv sync` by
@@ -98,6 +99,12 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 show_error_codes = true
 pretty = true
+
+# The kiteconnect SDK ships no type information; treat it as untyped (its use is
+# confined to data/brokers/ and fronted by our own KiteClient Protocol).
+[[tool.mypy.overrides]]
+module = ["kiteconnect.*"]
+ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- #
 # pytest

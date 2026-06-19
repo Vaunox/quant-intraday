@@ -25,7 +25,7 @@ Updated at the end of every session.
 
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
-| | P1.1 Broker adapter + auth/session | ☐ todo | | | |
+| 2026-06-19 | P1.1 Broker adapter + auth/session | ☑ done | `feat/p1.1-broker-adapter` | 54 new (158 total) | `KiteAdapter` behind `BrokerAdapter` (historical market data + daily session seam); `kiteconnect` SDK confined to `data/brokers/`; token-bucket rate limiter; 100% cov on the package. See notes. |
 | | P1.2 Live stream consumer | ☐ todo | | | |
 | | P1.3 Storage layer | ☐ todo | | | |
 | | P1.4 Historical backfill job | ☐ todo | | | |
@@ -368,3 +368,80 @@ capital/execution layer (**P3/P4**) — no `Signal`→`Side` mapping exists in c
 **Verification:** ruff, black, mypy strict (54 files), pre-commit; **104 tests**; types 100% cov.
 
 **Next:** **P1.1** (broker adapter + auth/session) — awaiting operator go.
+
+---
+
+## Phase 1 — Data & Feature Layer
+
+### 2026-06-19 — P1.1 Broker adapter (market data) + auth/session ☑
+
+**Goal:** a `KiteAdapter` for historical market data behind the `BrokerAdapter`
+Protocol, with the daily session/token seam — nothing outside `data/brokers/`
+importing the SDK.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §0.2 (Kite mechanics: ~3 req/s data
+limit, static-IP-for-orders, daily session reset), §0.3 ("never let the rest of the
+system import `kiteconnect`"); Deep Dive #5 (morning auth/token routine: login URL →
+`request_token` → `SHA-256(api_key+request_token+api_secret)` → `access_token`,
+manual-seed-then-automate). Transport decision (official SDK vs custom httpx)
+**confirmed by the operator at session start: official `kiteconnect` SDK.**
+
+**Delivered (`src/quant/data/brokers/`):**
+- `client.py` — `KiteClient` Protocol (the narrow SDK surface we use) + interval
+  normalization (`normalize_interval` / `KITE_INTERVALS`) + `create_kite_client`,
+  the **single, lazy** `kiteconnect` import site (keeps the SDK — and its heavy
+  twisted/autobahn deps — out of every import path until a live client is built).
+- `kite.py` — `KiteAdapter` (implements `BrokerAdapter`): `fetch_historical`
+  resolves symbol→token, ensures the session is seeded, throttles, calls the SDK,
+  and maps candles to the canonical bars schema **via `core.frames.bars_to_frame`**
+  (one schema source of truth). Trading/account methods raise `NotImplementedError`
+  naming their subtask (orders → P4.3, order reads → P4.2, positions → P4.5,
+  margins → P5.1) — tracked deferral, not a buried TODO (Ground Rule 4).
+- `auth.py` — `TokenStore` Protocol + `InMemoryTokenStore` (P1.1 default) +
+  `KiteAuthenticator` (`login_url` / `seed_session` / `access_token`); the
+  `api_secret` is read only via `core.secrets` and never logged.
+- `instruments.py` — `InstrumentRegistry` (`(exchange, tradingsymbol)`→token, from
+  the instruments dump; `from_client` builder).
+- `rate_limit.py` — `RateLimiter` Protocol + thread-safe `TokenBucketRateLimiter`
+  (config-driven, injectable clock/sleep).
+- `errors.py` — `BrokerError` + `SessionNotSeededError` / `InstrumentNotFoundError`
+  / `UnsupportedIntervalError`.
+- `docs/runbooks/kite_session.md` — the daily auth flow, secrets, wiring, caveats.
+- `pyproject.toml` — `kiteconnect>=4.2,<6` runtime dep (resolved 5.2.0; v5 signatures
+  verified) + a mypy override marking the untyped SDK `ignore_missing_imports`.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (67 files),
+pre-commit (12 hooks); **158 tests pass** (54 new); **100% coverage** on every
+`data/brokers/` module. A `test_brokers_confinement.py` scans the whole `quant`
+tree and fails CI on any `kiteconnect` reference outside `data/brokers/`.
+
+**Decisions**
+- **Official SDK, confined + wrapped.** Operator-confirmed. The SDK is fronted by our
+  own `KiteClient` Protocol and `TokenBucketRateLimiter`, and imported lazily in one
+  place, so tests run with fakes (no SDK, no network, no credentials).
+- **Symbol-based interface, token resolution inside the adapter.** Our
+  `BrokerAdapter.fetch_historical` is symbol-based (P0.5); Kite is token-based, so
+  the adapter resolves via `InstrumentRegistry` — the rest of the system never sees
+  instrument tokens.
+- **Candle → DataFrame via the existing `core.frames` bridge** (not a hand-rolled
+  frame) so the bars schema can't drift.
+- **`stream()` stays off `BrokerAdapter`.** The live WebSocket consumer is its own
+  ingest module (P1.2), matching the existing interface; not added here.
+
+**Bug caught & fixed (root cause, not the test — Ground Rule 4)**
+- The token-bucket's refill loop could spin forever: FP rounding left `tokens` a few
+  ULPs below 1.0, making the computed wait so small it fell below the clock's ULP, so
+  time stopped advancing (a unit test surfaced it as a `MemoryError`). Fixed with a
+  `1e-9` epsilon on the token comparison (grant ≈ sub-nanosecond early; loop now
+  provably terminates).
+
+**Follow-ups / notes (deferred, tracked)**
+- Token **persistence + automated morning seed → P5.2** (`InMemoryTokenStore` is
+  behind the `TokenStore` Protocol; a persistent store drops in with no other change).
+- **Orders/positions/margins → P4.2/P4.3/P4.5/P5.1** (currently `NotImplementedError`).
+- **Live tick/depth stream → P1.2**; **multi-year paginated/resumable backfill → P1.4.**
+- **Static IP** matters only for order placement (Phase 4); data endpoints are exempt.
+- ⚠️ Operator live-run prerequisites (none needed to build/test): paid Kite Connect
+  plan, `QUANT_SECRET_KITE_API_KEY` / `QUANT_SECRET_KITE_API_SECRET`, daily TOTP seed.
+
+**Next subtask: P1.2 — Live stream consumer.**
