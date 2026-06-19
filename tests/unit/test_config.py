@@ -68,6 +68,28 @@ def test_unknown_env_raises() -> None:
         load_config(env="prod", environ={})
 
 
+# --- storage tiers (P1.3) ----------------------------------------------------
+
+
+def test_storage_tier_config_loads() -> None:
+    storage = load_config(environ={}).storage
+    assert storage.parquet_path == "data/parquet"
+    assert storage.arctic_uri.startswith("lmdb://")
+    assert storage.arctic_library == "bars"
+    assert storage.redis_key_prefix == "quant"
+    assert storage.live_max_bars_per_symbol == 1000
+    assert storage.live_ttl_seconds == 0
+
+
+def test_storage_rejects_non_positive_window(config_tree: Path) -> None:
+    base = config_tree / "default.yaml"
+    data = yaml.safe_load(base.read_text())
+    data["storage"]["live_max_bars_per_symbol"] = 0  # must be > 0
+    base.write_text(yaml.safe_dump(data))
+    with pytest.raises(ConfigError):
+        load_config(env="dev", config_dir=config_tree, environ={})
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 
