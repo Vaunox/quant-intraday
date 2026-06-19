@@ -81,11 +81,17 @@ class BrokerRateLimits(_Section):
 
 
 class BrokerWebsocket(_Section):
-    """Broker streaming limits and mode."""
+    """Broker streaming limits, mode, and connection-resilience tuning."""
 
     mode: Literal["ltp", "quote", "full"]
     max_instruments_per_connection: int = Field(gt=0)
     max_connections: int = Field(gt=0)
+    # Auto-reconnect/backoff (handed to the SDK's exponential-backoff reconnect).
+    reconnect_max_tries: int = Field(default=50, gt=0)
+    reconnect_max_delay_seconds: int = Field(default=60, ge=5)  # SDK floor is 5s
+    connect_timeout_seconds: int = Field(default=30, gt=0)
+    # Feed-staleness watchdog: warn if no ticks arrive for this long while connected.
+    stale_timeout_seconds: float = Field(default=60.0, gt=0)
 
 
 class BrokerConfig(_Section):

@@ -26,7 +26,7 @@ Updated at the end of every session.
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
 | 2026-06-19 | P1.1 Broker adapter + auth/session | ☑ done | `feat/p1.1-broker-adapter` | 54 new (158 total) | `KiteAdapter` behind `BrokerAdapter` (historical market data + daily session seam); `kiteconnect` SDK confined to `data/brokers/`; token-bucket rate limiter; 100% cov on the package. See notes. |
-| | P1.2 Live stream consumer | ☐ todo | | | |
+| 2026-06-19 | P1.2 Live stream consumer | ☑ done | `feat/p1.2-live-stream` | 27 new (185 total) | `TickStreamConsumer` (full-mode ticks + 5-depth → `MarketUpdate` queue; resubscribe-on-reconnect; staleness heartbeat) behind a `TickerTransport` Protocol; `KiteTickerTransport` (SDK) confined to `data/brokers/`; 100% cov on new modules. See notes. |
 | | P1.3 Storage layer | ☐ todo | | | |
 | | P1.4 Historical backfill job | ☐ todo | | | |
 | | P1.5 Data hygiene jobs | ☐ todo | | | |
@@ -445,3 +445,56 @@ tree and fails CI on any `kiteconnect` reference outside `data/brokers/`.
   plan, `QUANT_SECRET_KITE_API_KEY` / `QUANT_SECRET_KITE_API_SECRET`, daily TOTP seed.
 
 **Next subtask: P1.2 — Live stream consumer.**
+
+### 2026-06-19 — P1.2 Live stream consumer ☑
+
+**Goal:** a robust live WebSocket consumer for ticks + 5-level depth, behind a
+swappable transport so nothing in `data/ingest` imports the broker SDK.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §0.2 (WebSocket modes — `full` = 5-depth
++ timestamp; 3000 instruments/conn, 3 conns/key) and the `brokers/` module note
+("WebSocket lifecycle: reconnect, heartbeat, resubscribe"). KiteTicker v5 API + full-
+mode tick shape verified via context7 and SDK introspection.
+
+**Delivered:**
+- `core/interfaces.py` — `TickerTransport` (the live-socket port) + `StreamListener`
+  (the callback sink) Protocols; `core/types.py` — `MarketUpdate` (a `Tick` + optional
+  `DepthSnapshot`).
+- `data/ingest/stream.py` — `TickStreamConsumer` (implements `StreamListener`):
+  resubscribes its full token set on **every (re)connect** (the testable
+  auto-recovery), parses each raw tick to a `MarketUpdate` (tz-aware IST), pushes to a
+  `queue.Queue` off the socket thread (a full queue **drops with a WARNING**, never
+  blocks the feed), and tracks a **staleness heartbeat**. Pure `parse_market_update`
+  for the tick/5-depth mapping. SDK-free.
+- `data/brokers/ticker.py` — `KiteTickerTransport` wrapping `kiteconnect.KiteTicker`
+  (the **only** ticker import site, lazy via `create_kite_ticker_transport`);
+  translates the SDK's `(ws, …)` callbacks to `StreamListener`. Confinement test still
+  green.
+- `config` — `broker.websocket` gains `reconnect_max_tries` / `reconnect_max_delay_seconds`
+  / `connect_timeout_seconds` / `stale_timeout_seconds` (schema + `default.yaml`),
+  so reconnect/backoff is config-driven (handed to the SDK's exponential backoff).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (72 files),
+pre-commit (12 hooks); **185 tests pass** (27 new); **100% coverage** on
+`stream.py`, `ticker.py`, and `MarketUpdate`.
+
+**Decisions**
+- **Reconnect/backoff = the SDK's** (KiteTicker's exponential backoff, configured by
+  us); duplicating it would fight the library (Ground Rule 4). Our consumer owns the
+  **resubscribe-on-connect** and **staleness** logic — the parts worth testing — and
+  those are driven by a `FakeTickerTransport` (the "fake socket").
+- **Backpressure drops loudly, never blocks.** `on_ticks` runs on the SDK's reactor
+  thread; blocking it would stall the feed, so a full queue increments a counter and
+  WARNs. Escalation of persistent staleness/feed-loss to the kill-switch is Layer 4/5.
+- **SDK confinement holds for streaming too:** the WebSocket lives behind
+  `TickerTransport`; `data/ingest` imports no SDK.
+
+**Follow-ups / notes (deferred, tracked)**
+- Consumer pushes to a `queue.Queue`; wiring it to the **Redis live store → P1.3**.
+- Multi-connection sharding (≤3000 tokens/conn, ≤3 conns) is config-aware but a
+  single-connection consumer suffices for a Nifty-100 universe; shard in a later pass
+  if the universe grows.
+- Feed-staleness → kill-switch escalation lands with execution safety (**P4.6**) /
+  monitoring (**P5.3**); P1.2 detects + warns only.
+
+**Next subtask: P1.3 — Storage layer.**

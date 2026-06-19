@@ -36,6 +36,10 @@ broker:
     mode: full                    # ltp | quote | full (full = 5-level depth + ts)
     max_instruments_per_connection: 3000
     max_connections: 3
+    reconnect_max_tries: 50       # SDK auto-reconnect attempts before giving up
+    reconnect_max_delay_seconds: 60 # cap on exponential backoff between retries
+    connect_timeout_seconds: 30
+    stale_timeout_seconds: 60.0   # warn if no ticks arrive for this long while live
 
 execution:
   order_type_preference: limit_near_touch  # prefer LIMIT over MARKET

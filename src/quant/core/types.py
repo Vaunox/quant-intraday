@@ -243,3 +243,27 @@ class Margins:
     available_margin: float
     used_margin: float
     net: float
+
+
+@dataclass(frozen=True, slots=True)
+class MarketUpdate:
+    """A single live market-data update: a trade tick plus its order-book snapshot.
+
+    The live stream (Layer 1) emits one of these per incoming ``full``-mode message.
+    ``depth`` is ``None`` when the message carries no order book (e.g. an ``ltp``/
+    ``quote`` payload, or a pre-open update without depth). ``tick`` and ``depth``
+    share the same symbol and timestamp.
+    """
+
+    tick: Tick
+    depth: DepthSnapshot | None
+
+    @property
+    def symbol(self) -> str:
+        """The instrument symbol this update is for."""
+        return self.tick.symbol
+
+    @property
+    def timestamp(self) -> datetime:
+        """The update's event time (tz-aware IST)."""
+        return self.tick.timestamp
