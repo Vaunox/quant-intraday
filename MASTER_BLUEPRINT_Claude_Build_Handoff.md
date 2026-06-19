@@ -809,6 +809,7 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 | 2026-06-17 | P0.5 | ☑ done | `feat/p0.5-types-interfaces` | 98 passing | Frozen domain types + 6 runtime-checkable Protocols; fakes type-check; 100% cov. |
 | 2026-06-17 | **GATE 0** | ☑ **passed** (tag `gate-0-foundation`) | | 99% cov | Foundation complete; CI green. Next: P1.1. |
 | 2026-06-19 | P1.1 | ☑ done | `feat/p1.1-broker-adapter` | 158 passing | `KiteAdapter` (historical market data + daily session) behind `BrokerAdapter`; `kiteconnect` SDK confined to `data/brokers/`; 100% cov. Details in `docs/PROGRESS.md`. |
+| 2026-06-19 | P1.2 | ☑ done | `feat/p1.2-live-stream` | 185 passing | `TickStreamConsumer` (full-mode ticks + 5-depth, resubscribe-on-reconnect, staleness heartbeat) behind a `TickerTransport` Protocol; Kite WebSocket confined to `data/brokers/`; 100% cov on new modules. Details in `docs/PROGRESS.md`. |
 | | … | | | | |
 
 **Gate status:** Gate 0 ☑ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐

@@ -15,7 +15,7 @@ authoritative conformance check is static (mypy), via the signatures below.
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import pandas as pd
 
@@ -121,4 +121,60 @@ class RiskEngine(Protocol):
 
     def is_trading_halted(self) -> bool:
         """Whether trading is halted (daily-loss / drawdown / kill-switch)."""
+        ...
+
+
+@runtime_checkable
+class StreamListener(Protocol):
+    """The events a :class:`TickerTransport` delivers to its consumer.
+
+    The transport speaks the broker's wire format; the listener (the live stream
+    consumer) parses raw ticks and reacts to connection lifecycle events. Keeping
+    this a Protocol lets the consumer be driven by a fake transport in tests.
+    """
+
+    def on_connect(self) -> None:
+        """Called on every (re)connection - the consumer (re)subscribes here."""
+        ...
+
+    def on_ticks(self, raw_ticks: Sequence[Mapping[str, Any]]) -> None:
+        """Called with a batch of raw broker tick dicts to be parsed."""
+        ...
+
+    def on_reconnect(self, attempt: int) -> None:
+        """Called on each auto-reconnect attempt (1-based)."""
+        ...
+
+    def on_close(self, code: int | None, reason: str | None) -> None:
+        """Called when the connection closes (the transport may auto-reconnect)."""
+        ...
+
+    def on_error(self, code: int | None, reason: str | None) -> None:
+        """Called on a transport error."""
+        ...
+
+
+@runtime_checkable
+class TickerTransport(Protocol):
+    """Abstraction over the live market-data socket (Kite's WebSocket today).
+
+    The concrete implementation wraps the broker SDK and lives in ``data/brokers``;
+    the consumer programs against this Protocol so nothing in ``data/ingest`` imports
+    the SDK, and a fake transport can stand in for the socket in tests.
+    """
+
+    def set_listener(self, listener: StreamListener) -> None:
+        """Register the listener that receives ticks and lifecycle callbacks."""
+        ...
+
+    def start(self) -> None:
+        """Open the connection and begin streaming (non-blocking)."""
+        ...
+
+    def stop(self) -> None:
+        """Close the connection and stop streaming (no auto-reconnect after)."""
+        ...
+
+    def subscribe(self, tokens: Sequence[int]) -> None:
+        """Subscribe to ``tokens`` and set full (5-depth) mode for them."""
         ...
