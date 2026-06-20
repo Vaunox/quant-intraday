@@ -206,6 +206,26 @@ class StorageConfig(_Section):
     live_ttl_seconds: int = Field(default=0, ge=0)
 
 
+class IngestConfig(_Section):
+    """Historical-backfill ingestion parameters (Layer 1, P1.4).
+
+    The backfill paginates history into ``backfill_chunk_days``-wide windows because
+    the broker caps the date span of a single historical request (~60 days for minute
+    candles; Deep Dive #1 §0.2). The window is configuration, not a literal, because
+    that cap differs by interval and broker (Ground Rule 2) — tune it down if a coarser
+    cap is hit, never hard-code it in the job.
+    """
+
+    # Inclusive calendar-day span fetched per paginated request (must clear the
+    # broker's per-request cap; 60 is Kite's minute-candle limit).
+    backfill_chunk_days: int = Field(gt=0)
+    # Candle interval to backfill (the research substrate; e.g. ``minute``). The broker
+    # adapter is the authority on valid intervals, so this stays a free string here.
+    backfill_interval: str
+    # Resume-state filename, resolved relative to ``storage.data_root`` by the job.
+    backfill_checkpoint_file: str = "backfill_checkpoint.json"
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -228,6 +248,7 @@ class Config(_Section):
     sizing: SizingConfig
     portfolio: PortfolioConfig
     storage: StorageConfig
+    ingest: IngestConfig
     logging: LoggingConfig
 
 

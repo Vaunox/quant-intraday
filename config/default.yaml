@@ -95,6 +95,14 @@ storage:
   live_max_bars_per_symbol: 1000        # hot-tier rolling window kept per symbol
   live_ttl_seconds: 0                   # 0 = retain by count only (no Redis TTL)
 
+ingest:
+  # Historical backfill (P1.4). Paginate history into <=60-day windows: Kite caps a
+  # single minute-candle request at ~60 days (Deep Dive #1 §0.2); lower this if a
+  # coarser interval hits its own cap. It is a broker constraint, not a magic number.
+  backfill_chunk_days: 60
+  backfill_interval: minute             # research substrate = minute bars
+  backfill_checkpoint_file: "backfill_checkpoint.json"  # resume state, under storage.data_root
+
 logging:
   level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL
   format: json                    # json | text

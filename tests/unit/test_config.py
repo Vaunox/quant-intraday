@@ -90,6 +90,21 @@ def test_storage_rejects_non_positive_window(config_tree: Path) -> None:
         load_config(env="dev", config_dir=config_tree, environ={})
 
 
+# --- ingest / backfill (P1.4) ------------------------------------------------
+
+
+def test_ingest_config_loads() -> None:
+    ingest = load_config(environ={}).ingest
+    assert ingest.backfill_chunk_days == 60  # Kite minute-candle request cap
+    assert ingest.backfill_interval == "minute"
+    assert ingest.backfill_checkpoint_file == "backfill_checkpoint.json"
+
+
+def test_ingest_rejects_non_positive_chunk_days() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__ingest__backfill_chunk_days": "0"})  # must be > 0
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 
