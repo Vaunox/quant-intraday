@@ -105,6 +105,18 @@ def test_ingest_rejects_non_positive_chunk_days() -> None:
         load_config(environ={"QUANT__ingest__backfill_chunk_days": "0"})  # must be > 0
 
 
+# --- hygiene (P1.5) ----------------------------------------------------------
+
+
+def test_hygiene_config_loads() -> None:
+    assert load_config(environ={}).hygiene.bad_tick_max_move_pct == 20.0
+
+
+def test_hygiene_rejects_non_positive_move_threshold() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__hygiene__bad_tick_max_move_pct": "0"})  # must be > 0
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 

@@ -29,7 +29,7 @@ Updated at the end of every session.
 | 2026-06-19 | P1.2 Live stream consumer | ☑ done | `feat/p1.2-live-stream` | 27 new (185 total) | `TickStreamConsumer` (full-mode ticks + 5-depth → `MarketUpdate` queue; resubscribe-on-reconnect; staleness heartbeat) behind a `TickerTransport` Protocol; `KiteTickerTransport` (SDK) confined to `data/brokers/`; 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.3 Storage layer | ☑ done | `feat/p1.3-storage-layer` | 82 new (267 total) | Three tiers behind `Repository`: `ParquetArchive` (immutable raw, symbol/date partitions; real+tested), `ArcticRepository` (versioned research; time-travel reads), `RedisLiveStore` (bounded recent-bars hot store). Optional clients (`arcticdb`/`redis`) confined to `data/store/` + lazy; arcticdb pins pandas<3 → not a declared dep. 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.4 Historical backfill job | ☑ done | `feat/p1.4-historical-backfill` | 40 new (307 total) | `BackfillJob` (paginated, resumable) + `run_backfill.py` CLI, writing through `Repository`. Per-symbol accumulate-then-write-once (the only tier-agnostic, idempotent write — Arctic `write_bars` snapshots, not appends); resume skips completed symbols via a `JsonBackfillCheckpoint`; one Arctic version per symbol. 100% cov on new modules. See notes. |
-| | P1.5 Data hygiene jobs | ☐ todo | | | |
+| 2026-06-20 | P1.5 Data hygiene jobs | ☑ done | `feat/p1.5-data-hygiene` | 50 new (357 total) | `data/hygiene/`: corporate-action back-adjustment (split/bonus/dividend, raw untouched), point-in-time `ConstituentRegistry` (delisted names included), bad-tick filter (point-in-time, logs every correction), calendar-aware gap detection, liquidity screen + ESM/T2T exclusion. Each idempotent/pure + tested; 100% cov on new modules. See notes. |
 | | P1.6 Feature library: core + dual-path harness | ☐ todo | | | |
 | | P1.7 Feature library: microstructure/technical/x-sec/regime | ☐ todo | | | |
 | | P1.8 Leakage & skew test suite (CI) | ☐ todo | | | |
@@ -655,3 +655,71 @@ needs path-based `--cov=src/quant/data/ingest` (the module-name form trips a num
   interval hits its own Kite cap.
 
 **Next subtask: P1.5 — Data hygiene jobs.**
+
+### 2026-06-20 — P1.5 Data hygiene jobs ☑
+
+**Goal:** the idempotent, tested, logged hygiene jobs that decide whether anything
+downstream is real — `data/hygiene/`: corporate actions, survivorship, bad ticks,
+gaps, liquidity/ESM-T2T.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §1.3 (the six hygiene jobs): §1.3.2
+corp-action adjustment ("store both raw and adjusted … a 1:5 split misread as a -80%
+return will poison a model"), §1.3.3 point-in-time constituents ("include
+delisted/merged/renamed"), §1.3.4 bad-tick filtering ("log every correction, never
+silently mutate" + a filter using future info is itself lookahead), §1.3.5 gap
+detection, §1.3.6 liquidity screen; Inviolable Rule 6 (exclude ESM/T2T).
+
+**Delivered (`src/quant/data/hygiene/`):**
+- `corporate_actions.py` — `CorporateAction` (split/bonus by `ratio`, dividend by
+  `amount`) + `CorporateActionAdjuster.adjust`: pure back-adjustment of bars *strictly
+  before* each ex-date by compounded price/volume factors (split/bonus: price ×1/ratio,
+  volume ×ratio; dividend: price ×(C−amt)/C off the raw reference close, volume
+  unchanged). Raw is never mutated (it stays the immutable archive); the adjusted frame
+  is the derived output. Fails loud on bad ratio/amount and a dividend ≥ reference close.
+- `survivorship.py` — `Membership` + `ConstituentRegistry` (`constituents_asof`,
+  `is_member`, `all_symbols` — the survivorship-correct universe that *includes*
+  since-delisted names). `from_records` accepts date objects or ISO strings.
+- `bad_ticks.py` — `BadTickFilter.filter` → `BadTickResult` (clean frame + a
+  `TickCorrection` per removed bar, each logged WARNING). Checks: non-positive price,
+  negative volume, OHLC inconsistency, and a **point-in-time** spike test vs the
+  *previous valid* close (config `hygiene.bad_tick_max_move_pct`). Idempotent
+  (re-filtering clean data removes nothing).
+- `gaps.py` — `GapDetector` (calendar-aware): intraday spacing gaps within a trading
+  day + missing trading days in the data span; overnight/weekend/holiday closures are
+  never flagged. Convention-agnostic (checks spacing, not a fixed grid).
+- `liquidity.py` — `LiquidityScreen` over `UniverseEligibility` (min ADV, max spread,
+  ESM/T2T toggle) → eligible + reasoned `Rejection`s; `average_daily_value(bars)`
+  computes ADV (Σ close×volume per day, averaged).
+- `core/config.py` + `config/default.yaml` — `HygieneConfig.bad_tick_max_move_pct`
+  (20%, the widest circuit band; config not a literal — Ground Rule 2).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (102 files), pre-commit
+(12 hooks); **357 tests pass (50 new)**; **100% coverage** on all seven new
+`data/hygiene` modules (path-based `--cov=src/quant/data/hygiene` on Windows).
+
+**Decisions**
+- **Jobs are pure transforms/queries over the canonical bars schema**, depending only on
+  `core` (calendar, config) + `store.serde` — no broker SDK, no concrete store — so they
+  run identically in research and live (the deep dive's Module-1 output contract). Each
+  is idempotent in the sense that matters: a pure function of its inputs.
+- **Raw stays immutable; adjusted is derived.** The corp-action job returns adjusted
+  bars (for returns/features); raw (for fills) is the P1.4 Parquet archive, untouched —
+  matching "store both raw and adjusted." Materializing the adjusted series to a store is
+  pipeline orchestration (P1.6+), not this job.
+- **Bad-tick decisions are point-in-time only** (spike vs *previous valid* close, never a
+  future bar) — a filter that peeked forward would itself be lookahead (§1.3.4).
+- **Spread is depth-derived, passed in.** Bars carry no spread; `LiquidityMetrics` takes
+  `median_spread_bps` (from the 5-level book, a later pass), keeping the screen pure.
+  ADV is computed from bars now.
+
+**Follow-ups / notes (deferred, tracked)**
+- **Operator reference data** (like the holiday calendar): point-in-time index
+  constituents and the live ESM/T2T list. The registries/screen are DI-first with
+  `from_records`; YAML loaders (mirroring `load_nse_calendar`) are trivial to add when
+  the operator supplies the data.
+- **Median spread** comes from depth snapshots — computed in the microstructure feature
+  pass (**P1.7**) and fed to the liquidity screen there.
+- Session pre-open/close *bar tagging* (§1.3.1) is deferred to the time-of-day features
+  (**P1.7**); the calendar (P0.4) already classifies session phases.
+
+**Next subtask: P1.6 — Feature library: core families + dual-path harness.**

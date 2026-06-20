@@ -103,6 +103,11 @@ ingest:
   backfill_interval: minute             # research substrate = minute bars
   backfill_checkpoint_file: "backfill_checkpoint.json"  # resume state, under storage.data_root
 
+hygiene:
+  # Bad-tick filter (P1.5): flag a bar whose close moves more than this % from the
+  # previous valid bar — wider than the 20% circuit band is almost certainly a bad print.
+  bad_tick_max_move_pct: 20.0
+
 logging:
   level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL
   format: json                    # json | text

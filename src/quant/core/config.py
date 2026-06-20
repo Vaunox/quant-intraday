@@ -226,6 +226,19 @@ class IngestConfig(_Section):
     backfill_checkpoint_file: str = "backfill_checkpoint.json"
 
 
+class HygieneConfig(_Section):
+    """Data-hygiene thresholds (Layer 1 hygiene, P1.5).
+
+    Liquidity/eligibility thresholds live with the universe (``UniverseEligibility``);
+    this section holds the cross-cutting hygiene knobs not tied to the universe file.
+    """
+
+    # A bar whose close moves more than this percent from the previous valid bar is
+    # flagged as a bad tick: beyond the widest NSE circuit band (~20%), an intraday
+    # jump is almost certainly an erroneous print, not a real move.
+    bad_tick_max_move_pct: float = Field(gt=0)
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -249,6 +262,7 @@ class Config(_Section):
     portfolio: PortfolioConfig
     storage: StorageConfig
     ingest: IngestConfig
+    hygiene: HygieneConfig
     logging: LoggingConfig
 
 
