@@ -28,7 +28,7 @@ Updated at the end of every session.
 | 2026-06-19 | P1.1 Broker adapter + auth/session | ☑ done | `feat/p1.1-broker-adapter` | 54 new (158 total) | `KiteAdapter` behind `BrokerAdapter` (historical market data + daily session seam); `kiteconnect` SDK confined to `data/brokers/`; token-bucket rate limiter; 100% cov on the package. See notes. |
 | 2026-06-19 | P1.2 Live stream consumer | ☑ done | `feat/p1.2-live-stream` | 27 new (185 total) | `TickStreamConsumer` (full-mode ticks + 5-depth → `MarketUpdate` queue; resubscribe-on-reconnect; staleness heartbeat) behind a `TickerTransport` Protocol; `KiteTickerTransport` (SDK) confined to `data/brokers/`; 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.3 Storage layer | ☑ done | `feat/p1.3-storage-layer` | 82 new (267 total) | Three tiers behind `Repository`: `ParquetArchive` (immutable raw, symbol/date partitions; real+tested), `ArcticRepository` (versioned research; time-travel reads), `RedisLiveStore` (bounded recent-bars hot store). Optional clients (`arcticdb`/`redis`) confined to `data/store/` + lazy; arcticdb pins pandas<3 → not a declared dep. 100% cov on new modules. See notes. |
-| | P1.4 Historical backfill job | ☐ todo | | | |
+| 2026-06-20 | P1.4 Historical backfill job | ☑ done | `feat/p1.4-historical-backfill` | 40 new (307 total) | `BackfillJob` (paginated, resumable) + `run_backfill.py` CLI, writing through `Repository`. Per-symbol accumulate-then-write-once (the only tier-agnostic, idempotent write — Arctic `write_bars` snapshots, not appends); resume skips completed symbols via a `JsonBackfillCheckpoint`; one Arctic version per symbol. 100% cov on new modules. See notes. |
 | | P1.5 Data hygiene jobs | ☐ todo | | | |
 | | P1.6 Feature library: core + dual-path harness | ☐ todo | | | |
 | | P1.7 Feature library: microstructure/technical/x-sec/regime | ☐ todo | | | |
@@ -587,3 +587,71 @@ outside `data/store/`; a parametrized `test_store_repository_contract.py` runs t
   `date_range` (perf only, with evidence — Ground Rule 7).
 
 **Next subtask: P1.4 — Historical backfill job.**
+
+### 2026-06-20 — P1.4 Historical backfill job ☑
+
+**Goal:** a paginated, resumable multi-year historical backfill that writes through the
+`Repository` interface — `data/ingest/backfill.py` + `scripts/run_backfill.py`.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §1.1/§1.2 + the "What I'd build" `ingest/`
+spec ("historical backfill jobs (paginated, resumable) … writing through a `Repository`
+interface"); §0.2 (Kite caps a single historical request — ~60 days for minute candles —
+which is *why* pagination exists). Build order (§"What I'd build"): adapter → **historical
+backfill** → storage → hygiene.
+
+**Delivered:**
+- `data/ingest/backfill.py` — `BackfillJob` (programs against `BrokerAdapter` + `Repository`
+  + a `BackfillCheckpoint`, all injected): paginates `[start, end]` into day-aligned,
+  non-overlapping `chunk_days` windows (`iter_chunks`), accumulates a symbol's chunks, and
+  writes **once per symbol**. Per-symbol failures are isolated (logged ERROR + recorded in
+  the `BackfillReport`, run continues); naive bounds / `start>end` / `chunk_days<=0` fail
+  loud. `JsonBackfillCheckpoint` (atomic temp-then-replace JSON, keyed `symbol:interval`)
+  is the durable resume state; `BackfillCheckpoint` Protocol + in-memory fake for tests.
+- `data/ingest/backfill_cli.py` — importable CLI wiring (arg/date parsing, universe
+  fallback, tier selection `parquet|arctic|redis`, `build_adapter`, `main`); `main` takes
+  an injected `environ` + `adapter_factory` so the whole orchestration is unit-tested with
+  a fake adapter. `scripts/run_backfill.py` is a thin shim (Ground Rule 3).
+- `core/config.py` + `config/default.yaml` — new `IngestConfig` (`backfill_chunk_days` (>0),
+  `backfill_interval`, `backfill_checkpoint_file`); the chunk window is config, not a magic
+  number (Ground Rule 2), since the cap is a per-interval broker constraint.
+- `data/ingest/errors.py` — `IngestError` + `BackfillCheckpointError`.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (90 files), pre-commit
+(12 hooks); **307 tests pass (40 new)**; **100% coverage** on all new `data/ingest`
+modules (`backfill`, `backfill_cli`, `errors`, `__init__`). Coverage on this Windows env
+needs path-based `--cov=src/quant/data/ingest` (the module-name form trips a numpy-2.x
+"load module more than once" import guard under pytest-cov).
+
+**Decisions**
+- **Accumulate-then-write-once per symbol** (the key design call). `Repository.write_bars`
+  is *not* a guaranteed append across tiers: Parquet appends day-partitions, but **Arctic
+  `write_bars` writes the frame as a whole new version (snapshot, replacing prior data)**
+  and Redis merges a bounded window (P1.3). The only behaviour the interface guarantees
+  everywhere is "persist this frame as the symbol's data, idempotently, readable by range".
+  So the job concatenates a symbol's paginated chunks and writes the full series in one
+  call — correct on *every* tier, and it yields exactly one Arctic version per symbol per
+  run (= "writes versioned data"). Writing per-chunk would silently corrupt the Arctic tier
+  (each chunk would overwrite the last) — a latent bug Ground Rule 4 forbids.
+- **Resume granularity is one symbol.** The checkpoint records "completed through date D"
+  per `(symbol, interval)`; a re-run skips any symbol already complete through the requested
+  `end` and re-fetches the rest in full. No duplication: completed symbols aren't re-fetched,
+  and the single re-write of an unfinished symbol is idempotent (and even with the checkpoint
+  deleted, idempotent writes prevent dups). Finer **per-chunk durable** resume would need an
+  explicit `append`-style method on `Repository` — deferred, tracked (it would also let a
+  multi-year symbol resume mid-stream instead of re-fetching from `start`).
+- **Broker- and store-agnostic.** The job imports no SDK and no concrete store; the CLI's
+  live `build_adapter` is the only operator/network path (`# pragma: no cover`). The
+  `kiteconnect`-confinement scanner still passes (the CLI only *imports from* `data/brokers`).
+
+**Follow-ups / notes (deferred, tracked)**
+- **Per-chunk durable resume** ⇒ a `Repository.append_bars` (or an ingest-side staging
+  area); only matters once single-symbol histories are large enough that re-fetching a
+  whole symbol on resume is costly.
+- **Hygiene (corp-actions/survivorship/bad-tick/gaps/liquidity) → P1.5** runs over what
+  this backfill lands in the raw archive.
+- ⚠️ Operator live-run prerequisites (none needed to build/test): paid Kite plan,
+  `QUANT_SECRET_KITE_API_KEY`/`_SECRET`, today's `--request-token` (daily manual seed),
+  static IP not required for data endpoints. Tune `backfill_chunk_days` down if a coarser
+  interval hits its own Kite cap.
+
+**Next subtask: P1.5 — Data hygiene jobs.**
