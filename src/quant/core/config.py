@@ -239,6 +239,30 @@ class HygieneConfig(_Section):
     bad_tick_max_move_pct: float = Field(gt=0)
 
 
+class FeaturesConfig(_Section):
+    """Feature-library parameters (Layer 1 features, P1.6).
+
+    These are the windows/horizons of the core feature families. They are versioned
+    config (Ground Rule 2): ``feature_set_version`` is bumped whenever they change, so a
+    model always records which feature definition it trained on.
+    """
+
+    # Multi-horizon log-return lookbacks, in bars (Deep Dive #1 §2.2.B).
+    return_horizons: tuple[int, ...] = Field(min_length=1)
+    volatility_window: int = Field(gt=1)  # realized-vol rolling window (bars)
+    atr_window: int = Field(gt=1)  # ATR rolling window (bars)
+    parkinson_window: int = Field(gt=1)  # Parkinson range-vol window (bars)
+    feature_set_version: str
+
+    @field_validator("return_horizons")
+    @classmethod
+    def _positive_horizons(cls, value: tuple[int, ...]) -> tuple[int, ...]:
+        """Every return horizon must be a positive number of bars."""
+        if any(horizon <= 0 for horizon in value):
+            raise ValueError(f"return_horizons must all be positive, got {value}")
+        return value
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -263,6 +287,7 @@ class Config(_Section):
     storage: StorageConfig
     ingest: IngestConfig
     hygiene: HygieneConfig
+    features: FeaturesConfig
     logging: LoggingConfig
 
 

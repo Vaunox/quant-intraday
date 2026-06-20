@@ -30,7 +30,7 @@ Updated at the end of every session.
 | 2026-06-20 | P1.3 Storage layer | ☑ done | `feat/p1.3-storage-layer` | 82 new (267 total) | Three tiers behind `Repository`: `ParquetArchive` (immutable raw, symbol/date partitions; real+tested), `ArcticRepository` (versioned research; time-travel reads), `RedisLiveStore` (bounded recent-bars hot store). Optional clients (`arcticdb`/`redis`) confined to `data/store/` + lazy; arcticdb pins pandas<3 → not a declared dep. 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.4 Historical backfill job | ☑ done | `feat/p1.4-historical-backfill` | 40 new (307 total) | `BackfillJob` (paginated, resumable) + `run_backfill.py` CLI, writing through `Repository`. Per-symbol accumulate-then-write-once (the only tier-agnostic, idempotent write — Arctic `write_bars` snapshots, not appends); resume skips completed symbols via a `JsonBackfillCheckpoint`; one Arctic version per symbol. 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.5 Data hygiene jobs | ☑ done | `feat/p1.5-data-hygiene` | 50 new (357 total) | `data/hygiene/`: corporate-action back-adjustment (split/bonus/dividend, raw untouched), point-in-time `ConstituentRegistry` (delisted names included), bad-tick filter (point-in-time, logs every correction), calendar-aware gap detection, liquidity screen + ESM/T2T exclusion. Each idempotent/pure + tested; 100% cov on new modules. See notes. |
-| | P1.6 Feature library: core + dual-path harness | ☐ todo | | | |
+| 2026-06-20 | P1.6 Feature library: core + dual-path harness | ☑ done | `feat/p1.6-feature-core` | 27 new (384 total) | `data/features/`: pure causal feature functions (multi-horizon log returns, realized-vol/ATR/Parkinson, intraday VWAP-deviation) + `compute_feature_frame` (vectorized) / `compute_features_asof` (incremental) harness. **Skew test: incremental == vectorized bar-by-bar** + prefix-invariance (no lookahead). 100% cov on new modules. See notes. |
 | | P1.7 Feature library: microstructure/technical/x-sec/regime | ☐ todo | | | |
 | | P1.8 Leakage & skew test suite (CI) | ☐ todo | | | |
 | | P1.9 Data-quality dashboard | ☐ todo | | | |
@@ -723,3 +723,62 @@ detection, §1.3.6 liquidity screen; Inviolable Rule 6 (exclude ESM/T2T).
   (**P1.7**); the calendar (P0.4) already classifies session phases.
 
 **Next subtask: P1.6 — Feature library: core families + dual-path harness.**
+
+### 2026-06-20 — P1.6 Feature library: core families + dual-path harness ☑
+
+**Goal:** point-in-time pure feature functions (returns, vol, VWAP-deviation) + the
+backtest/live dual-path harness — `data/features/`.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §2.1 (point-in-time correctness: features are
+`f(history≤t)`, normalization trailing-only), §2.2.A/B/C (the core families: price/return
+transforms, volatility, VWAP-to-mid deviation), §2.4 (the feature store — "compute once,
+serve identically"; one library, two callers; the skew tripwire: vectorized == incremental;
+output contract `compute_features(symbol, asof) → versioned vector`).
+
+**Delivered (`src/quant/data/features/`):**
+- `returns.py` — `log_return(bars, horizon)` (causal, `shift`-based; NaN warmup).
+- `volatility.py` — `realized_volatility` (rolling std of 1-bar log returns), `atr`
+  (Wilder true range, SMA), `parkinson_volatility` (high-low range estimator).
+- `vwap.py` — `intraday_vwap` (cumulative **within each IST session**, resets daily;
+  divide-by-zero → NaN) + `vwap_deviation = (close-vwap)/vwap`.
+- `harness.py` — `compute_feature_frame(bars, config)` (vectorized/backtest, indexed by
+  timestamp) + `compute_features_asof(bars, asof, config)` (incremental/live, via history
+  truncation through the *same* code path) + `feature_names(config)` (kept in lock-step
+  with the frame columns). `errors.py` — `FeatureError`.
+- `core/config.py` + `config/default.yaml` — `FeaturesConfig` (return_horizons,
+  vol/atr/parkinson windows, `feature_set_version`); horizons/windows are config, not
+  literals (Ground Rule 2). `pyproject.toml` — `numpy` promoted to a direct dep (used for
+  the vectorised feature math; already present transitively, lock unchanged at 2.4.6).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (111 files), pre-commit
+(12 hooks), `uv lock --check`; **384 tests pass (27 new)**; **100% coverage** on all six
+new `data/features` modules.
+
+**Decisions**
+- **Skew is eliminated structurally, not just tested.** Every feature is a *causal* pure
+  transform (trailing `shift`/`rolling`/intraday-`cumsum` only), and the incremental path
+  is literally "truncate history to ≤ asof, run the vectorized path, take the last row".
+  So `compute_features_asof(bars, t) == compute_feature_frame(bars).loc[t]` holds by
+  construction; the headline test asserts it bar-by-bar, and a prefix-invariance test
+  asserts no future bar changes a past feature (point-in-time). The full CI leakage/skew
+  suite is **P1.8**; this subtask ships the core tripwire.
+- **Features assume hygiene-clean, corp-action *adjusted* bars** (§1.3.2: adjusted for
+  returns/features, raw for fills). The harness does not adjust — that is P1.5's job.
+- **Intraday VWAP groups by IST date, no calendar dependency** (one IST date = one
+  intraday session); cumulative-within-day is causal.
+- **Harness operates on bars frames (one symbol), not a Repository.** The `(symbol, asof)`
+  contract is satisfied at the pipeline layer (read `repo.read_bars(symbol, …, asof)` then
+  call `compute_features_asof`); keeping the harness bars-based keeps it pure and testable.
+
+**Follow-ups / notes (deferred, tracked)**
+- **Remaining feature families → P1.7**: microstructure/OFI (5-depth), spread, depth
+  imbalance, signed trade flow, TA-Lib technicals, cyclical time-of-day, cross-sectional
+  ranks, regime. Robust scaling/winsorization (§2.3) lands with them.
+- **Leakage & skew CI suite → P1.8** (forward-shift invariance, trailing-only
+  normalization, no-future-correlation) — generalises this subtask's skew test and must
+  fail on an intentionally leaky feature.
+- **Feature materialization/versioning** (ArcticDB symbol per feature-set version, §2.4):
+  `feature_set_version` + `feature_names` are in place; persisting the frames is pipeline
+  orchestration (later).
+
+**Next subtask: P1.7 — Feature library: microstructure + technical + cross-sectional + regime.**

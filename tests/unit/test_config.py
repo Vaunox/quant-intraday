@@ -117,6 +117,25 @@ def test_hygiene_rejects_non_positive_move_threshold() -> None:
         load_config(environ={"QUANT__hygiene__bad_tick_max_move_pct": "0"})  # must be > 0
 
 
+# --- features (P1.6) ---------------------------------------------------------
+
+
+def test_features_config_loads() -> None:
+    features = load_config(environ={}).features
+    assert features.return_horizons == (1, 3, 5, 15, 30, 60)
+    assert features.volatility_window == 15
+    assert features.feature_set_version == "core-v1"
+
+
+def test_features_rejects_non_positive_horizon(config_tree: Path) -> None:
+    base = config_tree / "default.yaml"
+    data = yaml.safe_load(base.read_text())
+    data["features"]["return_horizons"] = [1, 0, 5]  # 0 is invalid
+    base.write_text(yaml.safe_dump(data))
+    with pytest.raises(ConfigError):
+        load_config(env="dev", config_dir=config_tree, environ={})
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 

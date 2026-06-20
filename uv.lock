@@ -1149,6 +1149,7 @@ version = "0.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "kiteconnect" },
+    { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pydantic" },
@@ -1176,6 +1177,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "kiteconnect", specifier = ">=4.2,<6" },
+    { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.2" },
     { name = "pyarrow", specifier = ">=16" },
     { name = "pydantic", specifier = ">=2.7" },

@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6.0",         # YAML config loading (P0.2)
     "tzdata>=2024.1",      # IANA tz database so zoneinfo resolves IST on any OS (P0.3)
     "pandas>=2.2",         # bulk time-series bars cross boundaries as DataFrames (P0.5 hybrid)
+    "numpy>=1.26",         # vectorised feature math (log returns, vol estimators) (P1.6)
     "kiteconnect>=4.2,<6", # Zerodha Kite Connect SDK, confined to data/brokers/ (P1.1)
     "pyarrow>=16",         # Parquet engine for the immutable raw archive tier (P1.3)
 ]
