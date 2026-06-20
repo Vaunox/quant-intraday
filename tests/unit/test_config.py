@@ -155,6 +155,25 @@ def test_features_rejects_winsor_bounds_inverted() -> None:
         load_config(environ={"QUANT__features__winsor_lower_pct": "99.5"})  # >= upper (99)
 
 
+# --- backtest engine (P2.1) --------------------------------------------------
+
+
+def test_backtest_config_loads() -> None:
+    backtest = load_config(environ={}).backtest
+    assert backtest.initial_capital_inr == 1000000.0
+    assert backtest.execution_delay_bars == 1  # next-bar-open
+
+
+def test_backtest_rejects_non_positive_capital() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__backtest__initial_capital_inr": "0"})  # must be > 0
+
+
+def test_backtest_rejects_zero_delay() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__backtest__execution_delay_bars": "0"})  # must be >= 1
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 
