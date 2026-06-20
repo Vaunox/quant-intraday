@@ -6,7 +6,7 @@ Updated at the end of every session.
 
 **Status:** ◐ in-progress / ☑ done / ☐ todo
 
-**Gates:** Gate 0 ☑ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
+**Gates:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
 
 ---
 
@@ -33,8 +33,8 @@ Updated at the end of every session.
 | 2026-06-20 | P1.6 Feature library: core + dual-path harness | ☑ done | `feat/p1.6-feature-core` | 27 new (384 total) | `data/features/`: pure causal feature functions (multi-horizon log returns, realized-vol/ATR/Parkinson, intraday VWAP-deviation) + `compute_feature_frame` (vectorized) / `compute_features_asof` (incremental) harness. **Skew test: incremental == vectorized bar-by-bar** + prefix-invariance (no lookahead). 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.7 Feature library: microstructure/technical/x-sec/regime | ☑ done | `feat/p1.7-features-extended` | 45 new (429 total) | `data/features/`: microstructure (OFI 5-depth, spread, depth imbalance, signed flow), TA-Lib technicals (RSI/MACD/Bollinger %B), cyclical time-of-day, cross-sectional sector-neutral ranks/z-scores, regime (vol/trend) + trailing winsorize/robust-scale (§2.3). All causal/point-in-time; `ta-lib` added (prebuilt wheels). 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.8 Leakage & skew test suite (CI) | ☑ done | `feat/p1.8-leakage-suite` | 38 new (467 total) | `tests/adversarial/`: reusable structural checks (forward-shift invariance, train/serve skew, trailing-only normalization, no-future-correlation) run across every feature family + **tripwires that fire on intentionally-leaky features**. Marked `adversarial`; runs in CI. See notes. |
-| | P1.9 Data-quality dashboard | ☐ todo | | | |
-| | **GATE 1** | ☐ | | | Tag `gate-1-data`. |
+| 2026-06-20 | P1.9 Data-quality dashboard | ☑ done | `feat/p1.9-data-quality` | 14 new (481 total) | `data/quality/`: `DataQualityDashboard` composes coverage (session-level vs NSE calendar) + gaps + bad-tick counts (P1.5) + feed-latency stats into a `DataQualityReport` with a text `render()`; surfaces issues per symbol. 100% cov on new modules. See notes. |
+| 2026-06-20 | **GATE 1** | ☑ **passed** (tag `gate-1-data`) | | 481 passing | Point-in-time, corp-action-adjusted, survivorship-correct, leakage-tested dataset + feature set reproducible on demand. Phase 1 complete. |
 
 ## Phase 2 — Research Layer
 
@@ -898,3 +898,66 @@ feature library.
   `test_future_correlation.py` so the guarantees extend automatically.
 
 **Next subtask: P1.9 — Data-quality dashboard** (last before Gate 1).
+
+### 2026-06-20 — P1.9 Data-quality dashboard ☑ (completes Gate 1)
+
+**Goal:** visibility into data health — `data/quality/`: gaps, bad-tick counts, coverage,
+feed-latency report/dashboard.
+
+**Reference (Ground Rule 9):** Deep Dive #1 ("a data-quality dashboard — gaps, bad-tick
+counts, feed latency, coverage") + the Module-1 output contract (a clean, point-in-time
+dataset retrievable on demand); composes the P1.5 hygiene jobs.
+
+**Delivered (`src/quant/data/quality/`):**
+- `report.py` — immutable carriers: `CoverageStats` (session-level: observed vs expected
+  trading days), `SymbolQuality` (coverage + gap/bad-tick counts; `has_issues`),
+  `FeedLatencyStats`, `DataQualityReport` (aggregates + `render()` text dashboard).
+- `dashboard.py` — `DataQualityDashboard.assess(bars_by_symbol, start, end, latency_samples)`
+  composes session coverage (NSE calendar) + `GapDetector` + `BadTickFilter` (P1.5) per
+  symbol; `summarize_feed_latency` (mean/p50/p95/max, seconds); `create_data_quality_dashboard`
+  factory (interval + bad-tick threshold from config — Ground Rule 2). Naive bounds /
+  start>end fail loud.
+- No new config/deps (composes existing hygiene jobs; numpy for percentiles).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (134 files), pre-commit
+(12 hooks); **481 tests pass (14 new)**; **100% coverage** on all three new modules.
+
+**Decisions**
+- **Two complementary lenses:** *coverage* is session-level (trading days present vs the
+  calendar's expected days over the requested window — catches edge/whole-day gaps);
+  *gaps* (P1.5 GapDetector) are bar-level holes within the observed span. Together they give
+  the full "how much do we have / where are the holes" picture without a brittle
+  bars-per-session convention.
+- **Composes, doesn't duplicate:** the dashboard reuses the P1.5 `GapDetector`/`BadTickFilter`
+  (injected; config-driven) over the raw bars, so it reports the same definitions the
+  pipeline enforces. Feed-latency samples come from the live stream (P1.2); the dashboard
+  only summarizes them.
+- **Library + text render, not a web UI.** The live trading dashboard is P5.3; this is the
+  Layer-1 *data*-quality report (consumed by the daily lifecycle / monitoring later).
+
+**Follow-ups / notes**
+- Wiring the dashboard into a scheduled post-backfill / daily-close job (and recording
+  per-tick feed latency in the P1.2 consumer) is ops orchestration (Phase 5).
+
+---
+
+## GATE 1 — Data & Feature Layer: ✅ PASSED (2026-06-20)
+
+All Phase-1 subtasks (P1.1–P1.9) complete and merged. The layer can **reproduce a
+point-in-time, corporate-action-adjusted, survivorship-correct, leakage-tested dataset and
+feature set on demand**:
+- **Dataset:** `KiteAdapter` market data (P1.1) → live stream (P1.2) → tiered `Repository`
+  storage (P1.3) → paginated/resumable backfill (P1.4) → hygiene: corp-action adjustment,
+  point-in-time survivorship, bad-tick filtering, gap detection, liquidity/ESM-T2T (P1.5).
+- **Features:** causal core families + dual-path harness (P1.6) and the extended families —
+  microstructure/OFI, TA-Lib technicals, time-of-day, cross-sectional, regime + §2.3
+  normalization (P1.7).
+- **Leakage-tested:** the adversarial CI suite (P1.8) enforces forward-shift invariance,
+  trailing-only normalization, no-future-correlation, and train/serve skew, and fails on an
+  intentionally leaky feature.
+- **Visibility:** the data-quality dashboard (P1.9).
+
+481 tests, all gates green. Tagged **`gate-1-data`**.
+
+**Next: Phase 2 — Research Layer** (P2.1 — validation harness core: purged CV + cost
+backtester; "build the validation engine before the models").
