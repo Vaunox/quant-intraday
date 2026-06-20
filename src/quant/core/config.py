@@ -247,11 +247,27 @@ class FeaturesConfig(_Section):
     model always records which feature definition it trained on.
     """
 
+    # Core families (P1.6).
     # Multi-horizon log-return lookbacks, in bars (Deep Dive #1 §2.2.B).
     return_horizons: tuple[int, ...] = Field(min_length=1)
     volatility_window: int = Field(gt=1)  # realized-vol rolling window (bars)
     atr_window: int = Field(gt=1)  # ATR rolling window (bars)
     parkinson_window: int = Field(gt=1)  # Parkinson range-vol window (bars)
+    # Technical indicators (P1.7, TA-Lib).
+    rsi_period: int = Field(gt=1)
+    macd_fast: int = Field(gt=0)
+    macd_slow: int = Field(gt=0)
+    macd_signal: int = Field(gt=0)
+    bollinger_period: int = Field(gt=1)
+    bollinger_std: float = Field(gt=0)
+    # Regime descriptors (P1.7).
+    trend_window: int = Field(gt=1)
+    regime_vol_window: int = Field(gt=1)
+    regime_vol_lookback: int = Field(gt=1)
+    # Trailing winsorization of fat-tailed features (P1.7, §2.3).
+    winsor_window: int = Field(gt=1)
+    winsor_lower_pct: float = Field(ge=0, lt=100)
+    winsor_upper_pct: float = Field(gt=0, le=100)
     feature_set_version: str
 
     @field_validator("return_horizons")
@@ -261,6 +277,15 @@ class FeaturesConfig(_Section):
         if any(horizon <= 0 for horizon in value):
             raise ValueError(f"return_horizons must all be positive, got {value}")
         return value
+
+    @model_validator(mode="after")
+    def _check_relations(self) -> "FeaturesConfig":
+        """MACD fast must be shorter than slow; winsor lower percentile below upper."""
+        if self.macd_fast >= self.macd_slow:
+            raise ValueError("features.macd_fast must be < macd_slow")
+        if self.winsor_lower_pct >= self.winsor_upper_pct:
+            raise ValueError("features.winsor_lower_pct must be < winsor_upper_pct")
+        return self
 
 
 class LoggingConfig(_Section):

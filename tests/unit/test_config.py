@@ -136,6 +136,25 @@ def test_features_rejects_non_positive_horizon(config_tree: Path) -> None:
         load_config(env="dev", config_dir=config_tree, environ={})
 
 
+def test_features_extended_params_load() -> None:
+    features = load_config(environ={}).features
+    assert features.rsi_period == 14
+    assert (features.macd_fast, features.macd_slow, features.macd_signal) == (12, 26, 9)
+    assert features.bollinger_std == 2.0
+    assert features.winsor_upper_pct == 99.0
+    assert features.regime_vol_lookback == 100
+
+
+def test_features_rejects_macd_fast_not_below_slow() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__features__macd_fast": "30"})  # >= slow (26)
+
+
+def test_features_rejects_winsor_bounds_inverted() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__features__winsor_lower_pct": "99.5"})  # >= upper (99)
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 

@@ -19,6 +19,7 @@ dependencies = [
     "numpy>=1.26",         # vectorised feature math (log returns, vol estimators) (P1.6)
     "kiteconnect>=4.2,<6", # Zerodha Kite Connect SDK, confined to data/brokers/ (P1.1)
     "pyarrow>=16",         # Parquet engine for the immutable raw archive tier (P1.3)
+    "ta-lib>=0.6.8",       # technical indicators, never hand-rolled; prebuilt wheels incl. manylinux (P1.7)
 ]
 
 # Optional storage backends, confined to data/store/ and imported lazily (P1.3).
@@ -126,6 +127,12 @@ ignore_missing_imports = true
 # untyped so a CI without them installed still type-checks the lazy factory shims.
 [[tool.mypy.overrides]]
 module = ["arcticdb.*", "redis.*"]
+ignore_missing_imports = true
+
+# TA-Lib is a C-extension wrapper that ships no type information; its use is confined to
+# data/features/technical.py behind our own typed Series wrappers.
+[[tool.mypy.overrides]]
+module = ["talib"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- #
