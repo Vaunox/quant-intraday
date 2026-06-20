@@ -32,7 +32,7 @@ Updated at the end of every session.
 | 2026-06-20 | P1.5 Data hygiene jobs | ☑ done | `feat/p1.5-data-hygiene` | 50 new (357 total) | `data/hygiene/`: corporate-action back-adjustment (split/bonus/dividend, raw untouched), point-in-time `ConstituentRegistry` (delisted names included), bad-tick filter (point-in-time, logs every correction), calendar-aware gap detection, liquidity screen + ESM/T2T exclusion. Each idempotent/pure + tested; 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.6 Feature library: core + dual-path harness | ☑ done | `feat/p1.6-feature-core` | 27 new (384 total) | `data/features/`: pure causal feature functions (multi-horizon log returns, realized-vol/ATR/Parkinson, intraday VWAP-deviation) + `compute_feature_frame` (vectorized) / `compute_features_asof` (incremental) harness. **Skew test: incremental == vectorized bar-by-bar** + prefix-invariance (no lookahead). 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.7 Feature library: microstructure/technical/x-sec/regime | ☑ done | `feat/p1.7-features-extended` | 45 new (429 total) | `data/features/`: microstructure (OFI 5-depth, spread, depth imbalance, signed flow), TA-Lib technicals (RSI/MACD/Bollinger %B), cyclical time-of-day, cross-sectional sector-neutral ranks/z-scores, regime (vol/trend) + trailing winsorize/robust-scale (§2.3). All causal/point-in-time; `ta-lib` added (prebuilt wheels). 100% cov on new modules. See notes. |
-| | P1.8 Leakage & skew test suite (CI) | ☐ todo | | | |
+| 2026-06-20 | P1.8 Leakage & skew test suite (CI) | ☑ done | `feat/p1.8-leakage-suite` | 38 new (467 total) | `tests/adversarial/`: reusable structural checks (forward-shift invariance, train/serve skew, trailing-only normalization, no-future-correlation) run across every feature family + **tripwires that fire on intentionally-leaky features**. Marked `adversarial`; runs in CI. See notes. |
 | | P1.9 Data-quality dashboard | ☐ todo | | | |
 | | **GATE 1** | ☐ | | | Tag `gate-1-data`. |
 
@@ -843,3 +843,58 @@ normalization + winsorization). Inviolable Rule 6 informs the ESM/T2T-aware univ
   book (wire in the universe-refresh pass).
 
 **Next subtask: P1.8 — Leakage & skew test suite (CI).**
+
+### 2026-06-20 — P1.8 Leakage & skew test suite (CI) ☑
+
+**Goal:** structural anti-leakage guarantees in CI — `tests/adversarial/`: forward-shift
+invariance, trailing-only normalization, no-suspicious-future-correlation, train/serve skew;
+the suite must **fail on an intentionally leaky feature**.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §2.4 (leakage tests in CI: "(a) shift inputs
+forward and assert features don't change retroactively, (b) no feature correlates suspiciously
+with the future label, (c) normalization uses only trailing data") + the dual-path skew
+tripwire; Part I Rule 2 (point-in-time correctness; leakage tests run in CI).
+
+**Delivered (`tests/adversarial/`):**
+- `leakage.py` — the reusable assertion API (raises `AssertionError` on a leak):
+  `assert_no_lookahead` (prefix == full's prefix), `assert_skew_free` (incremental ==
+  vectorized per bar), `assert_trailing_only` (perturbing the last value leaves earlier
+  outputs unchanged), `assert_no_future_correlation` / `max_abs_future_correlation`.
+- `sample_data.py` — seeded bars / 5-level depth book / trade tape / cross-sectional panel +
+  `forward_return` label. `leaky_features.py` — the known-bad inputs (`lookahead_return`
+  shift(-1), `centered_volatility` centred window, `full_sample_zscore`).
+- `test_no_lookahead.py` — forward-shift invariance across **every** family (returns, vol,
+  VWAP, RSI/MACD/Bollinger, regime, time-of-day, the assembled `compute_feature_frame`,
+  microstructure spread/imbalance/OFI, signed flow, cross-sectional rank/z-score) +
+  tripwires (lookahead & centred-window caught).
+- `test_train_serve_skew.py` — harness `compute_feature_frame` == `compute_features_asof`
+  for every bar + a full-sample-feature skew tripwire.
+- `test_trailing_normalization.py` — `rolling_zscore`/`robust_zscore`/`winsorize` are
+  trailing-only + a full-sample-zscore tripwire.
+- `test_future_correlation.py` — real features have |corr| with the forward return well
+  below 0.99 + a tripwire on a feature that *is* the forward return (|corr| == 1).
+- All modules marked `pytest.mark.adversarial` (registered marker; selectable with
+  `-m adversarial`), and run in the default CI `uv run pytest`.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (130 files), pre-commit
+(12 hooks); **467 tests pass (38 new)**; `-m adversarial` selects exactly the 38 leakage
+tests. No new `src/quant` modules — the suite is the deliverable and exercises the existing
+feature library.
+
+**Decisions**
+- **The checks are reusable assertions, applied two ways**: (a) over the *real* feature
+  library so CI fails if any feature becomes leaky, and (b) wrapped in `pytest.raises` over
+  *deliberately-leaky* features so the tripwire itself is proven to fire — satisfying
+  "fails on an intentionally leaky feature" while keeping CI green.
+- **Forward-shift invariance is the unifying primitive.** "Trailing-only normalization" is
+  just forward-shift invariance applied to the normalizers; "skew-free" is the same property
+  read as vectorized==incremental. Each named check is a distinct, documented entry point.
+- **Future-correlation threshold is high (0.99)** — it flags mechanical lookahead (a feature
+  that contains the future → |corr| ~ 1), not genuine edge; verified across families on a
+  200-bar seeded fixture.
+
+**Follow-ups / notes**
+- New features added later should be registered in `test_no_lookahead.py` /
+  `test_future_correlation.py` so the guarantees extend automatically.
+
+**Next subtask: P1.9 — Data-quality dashboard** (last before Gate 1).
