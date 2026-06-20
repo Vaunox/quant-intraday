@@ -31,7 +31,7 @@ Updated at the end of every session.
 | 2026-06-20 | P1.4 Historical backfill job | ☑ done | `feat/p1.4-historical-backfill` | 40 new (307 total) | `BackfillJob` (paginated, resumable) + `run_backfill.py` CLI, writing through `Repository`. Per-symbol accumulate-then-write-once (the only tier-agnostic, idempotent write — Arctic `write_bars` snapshots, not appends); resume skips completed symbols via a `JsonBackfillCheckpoint`; one Arctic version per symbol. 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.5 Data hygiene jobs | ☑ done | `feat/p1.5-data-hygiene` | 50 new (357 total) | `data/hygiene/`: corporate-action back-adjustment (split/bonus/dividend, raw untouched), point-in-time `ConstituentRegistry` (delisted names included), bad-tick filter (point-in-time, logs every correction), calendar-aware gap detection, liquidity screen + ESM/T2T exclusion. Each idempotent/pure + tested; 100% cov on new modules. See notes. |
 | 2026-06-20 | P1.6 Feature library: core + dual-path harness | ☑ done | `feat/p1.6-feature-core` | 27 new (384 total) | `data/features/`: pure causal feature functions (multi-horizon log returns, realized-vol/ATR/Parkinson, intraday VWAP-deviation) + `compute_feature_frame` (vectorized) / `compute_features_asof` (incremental) harness. **Skew test: incremental == vectorized bar-by-bar** + prefix-invariance (no lookahead). 100% cov on new modules. See notes. |
-| | P1.7 Feature library: microstructure/technical/x-sec/regime | ☐ todo | | | |
+| 2026-06-20 | P1.7 Feature library: microstructure/technical/x-sec/regime | ☑ done | `feat/p1.7-features-extended` | 45 new (429 total) | `data/features/`: microstructure (OFI 5-depth, spread, depth imbalance, signed flow), TA-Lib technicals (RSI/MACD/Bollinger %B), cyclical time-of-day, cross-sectional sector-neutral ranks/z-scores, regime (vol/trend) + trailing winsorize/robust-scale (§2.3). All causal/point-in-time; `ta-lib` added (prebuilt wheels). 100% cov on new modules. See notes. |
 | | P1.8 Leakage & skew test suite (CI) | ☐ todo | | | |
 | | P1.9 Data-quality dashboard | ☐ todo | | | |
 | | **GATE 1** | ☐ | | | Tag `gate-1-data`. |
@@ -782,3 +782,64 @@ new `data/features` modules.
   orchestration (later).
 
 **Next subtask: P1.7 — Feature library: microstructure + technical + cross-sectional + regime.**
+
+### 2026-06-20 — P1.7 Feature library: microstructure + technical + x-sec + regime ☑
+
+**Goal:** the remaining feature families — `data/features/` microstructure, TA-Lib
+technicals, cyclical time-of-day, cross-sectional (sector-neutral), regime, plus the
+§2.3 normalization/winsorization utilities.
+
+**Reference (Ground Rule 9):** Deep Dive #1 §2.2.A (microstructure/OFI — "the single most
+informative family"; OFI/spread/depth-imbalance/signed-flow from 5-depth + trades),
+§2.2.D (technicals via **TA-Lib**, "never hand-rolled"), §2.2.E (cyclical time-of-day),
+§2.2.F (cross-sectional sector-neutral ranks), §2.2.G (regime), §2.3 (trailing/robust
+normalization + winsorization). Inviolable Rule 6 informs the ESM/T2T-aware universe (P1.5).
+
+**Delivered (`src/quant/data/features/`):**
+- `microstructure.py` — depth/trade frames (`depth_to_frame`/`trades_to_frame`) + `bid_ask_spread`,
+  `relative_spread`, `depth_imbalance` (5-level), `order_flow_imbalance` (Cont-Kukanov-Stoikov,
+  multi-level), `signed_volume` (Lee-Ready tick rule). Operate on the order book / trade tape.
+- `technical.py` — TA-Lib wrappers `rsi`, `macd_histogram`, `bollinger_percent_b` (typed
+  Series; `talib` confined here).
+- `temporal.py` — `time_of_day_features`: cyclical sin/cos of minute-of-day & day-of-week +
+  within-session `time_since_open`/`time_to_close` (from NSE session bounds).
+- `cross_sectional.py` — `cross_sectional_rank` (centred percentile) + `sector_neutral_zscore`
+  (standardize within sector, per timestamp; fails loud on an unmapped symbol).
+- `regime.py` — `volatility_regime` (vol vs trailing median) + `trend_strength` (close-vs-mean z).
+- `normalize.py` — `winsorize` (trailing rolling quantile clip), `rolling_zscore`,
+  `robust_zscore` (median/IQR), all trailing-window only.
+- `core/config.py` + `config/default.yaml` — `FeaturesConfig` gains technical/regime/winsor
+  params (config, not literals — Ground Rule 2). `pyproject.toml` — `ta-lib>=0.6.8` (core dep;
+  prebuilt wheels incl. `manylinux_2_28_x86_64`, so CI's frozen sync needs no C toolchain) +
+  `talib` mypy override.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (123 files), pre-commit
+(12 hooks), `uv lock --check`; **429 tests pass (45 new)**; **100% coverage** on all
+`data/features` modules (path-based `--cov=src/quant/data/features` on Windows).
+
+**Decisions**
+- **TA-Lib is usable in CI.** It mandates the C library, but `ta-lib` 0.6.8 ships prebuilt
+  wheels (incl. manylinux), so `uv sync --frozen` on ubuntu installs a binary — no compile.
+  Verified the lock carries the linux wheel before declaring it. "Never hand-rolled" honoured.
+- **Microstructure operates on the book/tape, not bars.** OFI/spread/imbalance use a depth
+  frame (5 levels, missing levels → NaN price/0 qty); signed flow uses a trades frame. These
+  are causal (per-snapshot, or current-vs-previous for OFI/tick-rule). Aggregating them to the
+  bar clock and joining into the model matrix is pipeline integration (later).
+- **Cross-sectional uses contemporaneous (time-t) data across names** — not lookahead; it is
+  the cross-sectional normalizer (§2.3). Sector-neutral z-score removes market/sector moves.
+- **Families stay standalone functions** (different inputs: bars / book / tape / panel); the
+  P1.6 `compute_feature_frame` skew harness is unchanged. Each new family is independently
+  causal/point-in-time (prefix-invariance tested where bar-based).
+- **`feature_set_version` stays `core-v1`** (the harness output is unchanged; the new families
+  are additive functions). Bump it when they are wired into the materialized feature matrix.
+
+**Follow-ups / notes (deferred, tracked)**
+- **Leakage & skew CI suite → P1.8**: generalize the P1.6 skew test across all families and
+  fail on an intentionally leaky feature (forward-shift invariance, trailing-only norm,
+  no-future-correlation).
+- **Feature-matrix assembly/materialization**: aggregate microstructure to the bar clock, join
+  cross-sectional across the universe, version per `feature_set_version` (pipeline, later).
+- **Median spread for the P1.5 liquidity screen** now has a source: `relative_spread` over the
+  book (wire in the universe-refresh pass).
+
+**Next subtask: P1.8 — Leakage & skew test suite (CI).**
