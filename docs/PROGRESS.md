@@ -43,7 +43,7 @@ Updated at the end of every session.
 | 2026-06-21 | P2.1 Validation harness core (purged CV + cost backtester) | ☑ done | `feat/p2.1-validation-harness` | 72 new (553 total) | `research/validation/`: `PurgedKFold` (purge + embargo, strict no-overlap), `IndianCostModel` (itemised per-order brokerage/STT/exchange/SEBI/stamp/GST), `DepthAwareSlippage` (size-vs-liquidity participation curve), `Backtester` (event-driven, next-bar-open, intraday square-off, costs+slippage, latency). 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.2 CPCV + DSR + PBO | ☑ done | `feat/p2.2-cpcv-dsr-pbo` | 61 new (614 total) | `research/validation/`: `CombinatorialPurgedCV` (φ=C(N,k)·k/N path reconstruction + path-Sharpe distribution), Deflated/Probabilistic Sharpe (`metrics.py`, stdlib `NormalDist` — no SciPy), PBO via CSCV (`pbo.py`), `TrialTracker`. Refactored the purge primitive (`purged_train_mask`) out of `PurgedKFold` for reuse across non-adjacent test groups. 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.3 Labeling: CUSUM + triple-barrier | ☑ done | `feat/p2.3-labeling` | 38 new (652 total) | `research/labeling/`: symmetric `cusum_events` sampler + `TripleBarrierLabeler` (vol-scaled barriers floored at the cost hurdle, high/low first-touch with conservative same-bar stop, vertical = IST session end). `LabelSet.label_times` (t0→t1) feeds the purged CV/CPCV splitters; `.sides` is the primary label. 100% cov on new modules. See notes. |
-| | P2.4 Sample weighting | ☐ todo | | | |
+| 2026-06-21 | P2.4 Sample weighting | ☑ done | `feat/p2.4-sample-weighting` | 36 new (688 total) | `research/labeling/`: `SampleWeights` (indicator matrix → concurrency, average-uniqueness, return-attribution) + `time_decay_weights`; uniqueness-aware `sequential_bootstrap` (+ `average_uniqueness_of_sample` diagnostic, seeded RNG). Corrects non-IID overlapping labels (AFML ch. 4). 100% cov on new modules. See notes. |
 | | P2.5 Meta-labeling + fractional differentiation | ☐ todo | | | |
 | | P2.6 Model: baseline + tracking + calibration | ☐ todo | | | |
 | | P2.7 Ensemble + regime gate + registry | ☐ todo | | | |
@@ -1206,3 +1206,66 @@ last-bar skips). `LabelSet.label_times` is fed through `PurgedKFold` (the contra
   return units).
 
 **Next subtask: P2.4 — Sample weighting.**
+
+### 2026-06-21 — P2.4 Sample weighting ☑
+
+**Goal:** correct for non-IID labels — overlapping triple-barrier windows share returns, so
+two "samples" can be largely the same information; train naively and the model overfits.
+Builds on P2.3's `LabelSet.label_times`.
+
+**Reference (Ground Rule 9):** Deep Dive #2 §3.5 (the four corrections, all AFML ch. 4):
+**concurrency / average uniqueness** (`c_t` active labels per bar; a label's weight = mean
+of `1/c_t` over its window — "the single most important correction"), **sequential
+bootstrap** (draw by uniqueness so each bag carries more independent info), **time-decay**
+(older relationships fade), **return-attribution** (weight by the move's magnitude).
+
+**Delivered (`src/quant/research/labeling/`):**
+- `weights.py` — `SampleWeights(bar_times, label_times)`: builds the (bars × labels)
+  indicator matrix once, then `concurrency()` (per bar), `average_uniqueness()` (per label,
+  the primary weight), `return_attribution(prices, normalize=)` (`|Σ r_t/c_t|`, AFML §4.4),
+  and exposes `indicator_matrix` for the bootstrap. `time_decay_weights(uniqueness,
+  last_weight)` — piecewise-linear decay over *cumulative uniqueness* (newest = 1, oldest =
+  `last_weight`; negative zeroes the oldest fraction).
+- `bootstrap.py` — `sequential_bootstrap(indicator_matrix, n_samples, *, rng)`: draws by
+  each candidate's average uniqueness *given the running sample* (vectorized matrix-vector
+  update per draw), **seeded `np.random.Generator` injected** (Ground Rule 7).
+  `average_uniqueness_of_sample` is the AFML diagnostic proving the draw quality.
+- `errors.py` — reuses `LabelingInputError`.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (161 files), pre-commit
+(12 hooks); **688 tests pass (36 new)**; **100% coverage** on the new modules (whole
+`research/labeling` package at 100%). Uniqueness hand-computed (overlap → 2/3, nested →
+0.5, disjoint → 1.0, isolated → 1.0); concurrency `[1,2,2,1,0,0]`; return-attribution
+splits shared bars and normalizes to mean 1; time-decay identities (last_weight 1 → no
+decay, 0 → newest 1, negative → oldest 0); the **sequential bootstrap beats uniform on
+average uniqueness** over 40 seeds (§4.5.3's promise) and is deterministic per seed.
+
+**Decisions**
+- **Indicator-matrix foundation, built once.** Concurrency, uniqueness, return-attribution,
+  and the bootstrap all derive from one (bars × labels) `int8` matrix on a `SampleWeights`
+  object (like `Backtester` holding its config) — no recomputation, and the matrix is the
+  bootstrap's input. Concurrency is counted over the **full bar timeline** (not just event
+  bars), so `bar_times` is required alongside `label_times`.
+- **Labeling stays independent of validation.** The label-times contract is re-validated
+  locally here rather than importing `validation.splits._validate_label_times` — labels are
+  *upstream* of cross-validation in the pipeline, so the dependency must not point that way
+  (Ground Rule 1). The small duplication is the right trade.
+- **Vectorized sequential bootstrap.** Each draw updates a running per-bar concurrency and
+  computes every candidate's average uniqueness as a single `mat.T @ (1/(conc+1))` — O(bars
+  × labels) per draw, not the naive triple loop. Correct *and* fast enough for research-scale
+  event sets (Ground Rule 7).
+- **RNG injected, never global.** `sequential_bootstrap` takes a required keyword-only
+  seeded `Generator`, so every bag is reproducible (determinism, Ground Rule 7) — no hidden
+  global RNG.
+- **Return-attribution matches AFML's window** (`[t0, t1]` inclusive, including the entry
+  bar's return) for internal consistency with the concurrency it divides by; the
+  economically-exact realized return already lives on `LabelSet.ret` if a caller wants it.
+
+**Follow-ups / notes (deferred, tracked)**
+- **Meta-labeling + frac-diff → P2.5** (primary side + bet/no-bet; min-`d` via ADF).
+- **Model training → P2.6** consumes these as `sample_weight` (uniqueness × time-decay, or
+  return-attribution) and the sequential-bootstrap indices for uniqueness-aware bagging.
+- **σ / prices sourcing** stays the caller's job (return-attribution takes close prices
+  indexed by the bar timeline); the module is data-source-agnostic.
+
+**Next subtask: P2.5 — Meta-labeling + fractional differentiation.**
