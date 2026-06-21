@@ -323,6 +323,43 @@ class FeaturesConfig(_Section):
         return self
 
 
+class ModelConfig(_Section):
+    """LightGBM baseline + purged-CV + calibration parameters (Layer 2 models, P2.6).
+
+    Capacity is deliberately kept **modest** (Deep Dive #2 §4.2: "shallow trees, strong
+    regularization … the goal is a small robust edge, not a perfect in-sample fit") — the
+    schema even constrains ``max_depth`` positive so a baseline can never request an
+    unbounded-depth tree. The cross-validation knobs feed a :class:`PurgedKFold` for both
+    hyperparameter tuning and the out-of-sample evaluation the model is judged on; nothing
+    here is evaluated on a non-purged split (Inviolable Rule 2). ``model_version`` tags
+    every tracked run/artifact so a model always records the definition it was trained on
+    (the registry proper lands in P2.7).
+    """
+
+    objective: Literal["binary"] = "binary"  # the calibratable baseline form (side/meta)
+    # LightGBM capacity + regularization (native-API params).
+    learning_rate: float = Field(gt=0)
+    num_leaves: int = Field(gt=1)  # primary capacity knob
+    max_depth: int = Field(gt=0)  # capped shallow (§4.2); positive by schema discipline
+    min_child_samples: int = Field(gt=0)  # strong-regularization floor on leaf size
+    num_boost_round: int = Field(gt=0)
+    feature_fraction: float = Field(gt=0, le=1)
+    bagging_fraction: float = Field(gt=0, le=1)
+    bagging_freq: int = Field(ge=0)
+    lambda_l1: float = Field(ge=0)
+    lambda_l2: float = Field(ge=0)
+    min_gain_to_split: float = Field(ge=0)
+    max_bin: int = Field(gt=1)
+    # Purged cross-validation (tuning + OOS evaluation / calibration set).
+    cv_folds: int = Field(ge=2)
+    cv_embargo_pct: float = Field(ge=0, lt=1)
+    # Permutation (MDA) importance repeats — averaged within the CV (§4.2, not MDI).
+    permutation_repeats: int = Field(gt=0)
+    # Reproducibility (Ground Rule 7: seed every RNG) + registry tag.
+    random_seed: int = Field(ge=0)
+    model_version: str
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -350,6 +387,7 @@ class Config(_Section):
     ingest: IngestConfig
     hygiene: HygieneConfig
     features: FeaturesConfig
+    model: ModelConfig
     logging: LoggingConfig
 
 

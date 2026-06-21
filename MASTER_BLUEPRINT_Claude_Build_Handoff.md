@@ -976,9 +976,10 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 | 2026-06-21 | P2.3 | ☑ done | `feat/p2.3-labeling` | 652 passing (38 new) | `research/labeling/`: symmetric `cusum_events` sampler + `TripleBarrierLabeler` (vol-scaled barriers floored at the cost hurdle, high/low first-touch with conservative same-bar stop, vertical = IST session end). `LabelSet.label_times` (t0→t1) feeds the purged CV/CPCV splitters; `.sides` is the primary label. 100% cov on new modules. Details in `docs/PROGRESS.md`. |
 | 2026-06-21 | P2.4 | ☑ done | `feat/p2.4-sample-weighting` | 688 passing (36 new) | `research/labeling/`: `SampleWeights` (indicator matrix → concurrency, average-uniqueness, return-attribution) + `time_decay_weights`; uniqueness-aware `sequential_bootstrap` (seeded RNG, beats uniform on avg uniqueness). Corrects non-IID overlapping labels (AFML ch. 4). 100% cov on new modules. Details in `docs/PROGRESS.md`. |
 | 2026-06-21 | P2.5 | ☑ done | `feat/p2.5-meta-fracdiff` | 728 passing (40 new) | `research/labeling/`: momentum/mean-reversion primary + `MetaLabeler` (side-aware bet/no-bet via shared `barriers.first_touch`); `research/features_research/`: `frac_diff` (binomial FFD, causal) + `adf_test` + `min_ffd` (min-d stationary, retains memory). Added `statsmodels` (resolves with pandas 3.x). 100% cov on new modules. Details in `docs/PROGRESS.md`. |
+| 2026-06-21 | P2.6 | ☑ done | `feat/p2.6-model-baseline` | 786 passing (58 new) | `research/models/`: LightGBM baseline (native API) evaluated **only under purged CV** (pooled OOS preds), permutation/MDA importance (not MDI), **isotonic calibration** (hand-rolled PAVA), purged-CV hyperparameter tuning, and experiment tracking (`ExperimentTracker` → in-memory default + lazy, confined **MLflow** adapter — operator-installed like arcticdb, since mlflow pins pandas<3). `LightGBMBaseline` implements the live `Model`. Added `lightgbm`; mlflow not a declared dep. 100% cov on new modules. Details in `docs/PROGRESS.md`. |
 | | … | | | | |
 
-**Gate status:** Gate 0 ☑ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
+**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
 
 ---
 
