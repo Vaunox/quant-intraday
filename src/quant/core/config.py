@@ -170,6 +170,26 @@ class BacktestConfig(_Section):
     execution_delay_bars: int = Field(default=1, ge=1)
 
 
+class LabelingConfig(_Section):
+    """Event-sampling + triple-barrier labeling parameters (Layer 2 labeling, P2.3).
+
+    The CUSUM filter samples a candidate event when cumulative return movement clears
+    ``cusum_threshold`` (Deep Dive #2 §3.3). The triple-barrier labeler then sets
+    volatility-scaled profit-take / stop barriers — ``k_up·sigma`` / ``k_dn·sigma`` with asymmetric
+    multiples (tighter stop than target) — floored at ``barrier_min_return`` so a ``+1`` is
+    a *tradeable* win after costs, and a vertical barrier at session end (§3.2).
+    """
+
+    cusum_threshold: float = Field(gt=0)  # event when |cumulative return| clears this
+    barrier_upper_multiple: float = Field(gt=0)  # k_up (profit-take, in units of sigma)
+    barrier_lower_multiple: float = Field(gt=0)  # k_dn (stop-loss, in units of sigma)
+    # Cost-hurdle floor: barriers never narrower than this return, so a labeled win clears
+    # the ~0.12-0.20% round-trip cost (§3.2). 0 disables the floor (pure vol scaling).
+    barrier_min_return: float = Field(ge=0)
+    # Vertical barrier: 0 = session end (MIS square-off); else cap the hold to this many bars.
+    vertical_max_hold_bars: int = Field(ge=0)
+
+
 class RiskConfig(_Section):
     """Hard risk limits (consumed by the un-overridable risk engine, P3.1)."""
 
@@ -322,6 +342,7 @@ class Config(_Section):
     costs: CostConfig
     slippage: SlippageConfig
     backtest: BacktestConfig
+    labeling: LabelingConfig
     risk: RiskConfig
     sizing: SizingConfig
     portfolio: PortfolioConfig

@@ -174,6 +174,23 @@ def test_backtest_rejects_zero_delay() -> None:
         load_config(environ={"QUANT__backtest__execution_delay_bars": "0"})  # must be >= 1
 
 
+# --- labeling (P2.3) ---------------------------------------------------------
+
+
+def test_labeling_config_loads() -> None:
+    labeling = load_config(environ={}).labeling
+    assert labeling.cusum_threshold == 0.01
+    assert labeling.barrier_upper_multiple == 2.0
+    assert labeling.barrier_lower_multiple == 1.5  # tighter stop than target
+    assert labeling.barrier_min_return == 0.002  # cost-hurdle floor
+    assert labeling.vertical_max_hold_bars == 0  # 0 = session end
+
+
+def test_labeling_rejects_non_positive_threshold() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__labeling__cusum_threshold": "0"})  # must be > 0
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 
