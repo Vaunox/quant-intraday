@@ -45,7 +45,7 @@ Updated at the end of every session.
 | 2026-06-21 | P2.3 Labeling: CUSUM + triple-barrier | ☑ done | `feat/p2.3-labeling` | 38 new (652 total) | `research/labeling/`: symmetric `cusum_events` sampler + `TripleBarrierLabeler` (vol-scaled barriers floored at the cost hurdle, high/low first-touch with conservative same-bar stop, vertical = IST session end). `LabelSet.label_times` (t0→t1) feeds the purged CV/CPCV splitters; `.sides` is the primary label. 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.4 Sample weighting | ☑ done | `feat/p2.4-sample-weighting` | 36 new (688 total) | `research/labeling/`: `SampleWeights` (indicator matrix → concurrency, average-uniqueness, return-attribution) + `time_decay_weights`; uniqueness-aware `sequential_bootstrap` (+ `average_uniqueness_of_sample` diagnostic, seeded RNG). Corrects non-IID overlapping labels (AFML ch. 4). 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.5 Meta-labeling + fractional differentiation | ☑ done | `feat/p2.5-meta-fracdiff` | 40 new (728 total) | `research/labeling/`: `momentum_side`/`mean_reversion_side` primary rules + `MetaLabeler` (side-aware bet/no-bet via a shared `barriers.first_touch`); `research/features_research/`: `frac_diff` (binomial FFD) + `adf_test` (statsmodels) + `min_ffd` (min-d stationary, retains memory). Added `statsmodels` dep (resolves with pandas 3.x). 100% cov on new modules. See notes. |
-| | P2.6 Model: baseline + tracking + calibration | ☐ todo | | | |
+| 2026-06-21 | P2.6 Model: baseline + tracking + calibration | ☑ done | `feat/p2.6-model-baseline` | 58 new (786 total) | `research/models/`: LightGBM baseline (native API) evaluated only under purged CV (pooled OOS predictions); permutation/MDA importance computed within the CV (not MDI); isotonic probability calibration (hand-rolled PAVA, no sklearn); purged-CV `HyperparameterTuner`; `ExperimentTracker` (in-memory default + lazy, confined `MLflowExperimentTracker` — operator-installed, pandas<3). `LightGBMBaseline` implements the live `Model`. Added `lightgbm`; mlflow not a declared dep. 100% cov on new modules. See notes. |
 | | P2.7 Ensemble + regime gate + registry | ☐ todo | | | |
 | | P2.8 Robustness battery + two-engine reconciliation | ☐ todo | | | |
 | | P2.9 Validation report + kill-gate emitter | ☐ todo | | | |
@@ -1344,3 +1344,91 @@ differenced series keeps materially more correlation with the level than returns
   sweeps it. A model primary (not just a rule) also fits the `sides` contract.
 
 **Next subtask: P2.6 — Model: baseline + tracking + calibration.**
+
+### 2026-06-21 — P2.6 Model: baseline + tracking + calibration ☑
+
+**Goal:** the LightGBM baseline *under proper discipline* — *"do this first, always; if a
+clean, cost-aware baseline isn't profitable in honest validation, no deeper model will save
+it."* Builds on P2.1 (purged CV) and P2.5 (the meta/primary labels it trains on).
+
+**Reference (Ground Rule 9):** Deep Dive #2 §4.1 Step 1 (LightGBM baseline first), §4.2 (the
+four "things people get wrong": **MDA/SHAP not MDI**, **calibration mandatory**, **tuning
+under purged CV**, **modest capacity**), §4b.5 (MLflow experiment tracking → honest trial
+count). Part II environment policy (optional backends that pin `pandas<3` stay
+operator-installed behind an interface — the arcticdb precedent, P1.3). LightGBM native-API
+(`Dataset`/`train`/`Booster.predict`) verified at the version resolved (4.6.0).
+
+**Delivered (`src/quant/research/models/`):**
+- `baseline.py` — `BaselineTrainer(config).train(...)`: runs `PurgedKFold`, pools the
+  **out-of-fold** predictions (every event predicted by a model that never saw it), fits the
+  calibrator on those leak-free OOS preds, then trains the deliverable booster on all data.
+  `LightGBMBaseline` (booster + calibrator) implements the live `core.interfaces.Model`
+  (`predict(features) -> calibrated P(y=1)`), so research and live share one object;
+  `BaselineResult` carries OOS preds, fold scores, importances, and the logged metrics. The
+  single LightGBM import site (confinement, like kiteconnect/arcticdb).
+- `calibration.py` — `fit_isotonic` (weighted **PAVA**) → `IsotonicCalibrator`; monotone by
+  construction, interpolates between knots, flat-extrapolates at the ends. Hand-rolled (no
+  sklearn), the same lean call as P2.2's stdlib `NormalDist` over SciPy.
+- `importance.py` — `permutation_importance` (MDA): shuffle a column on the **held-out** fold,
+  measure the score drop; seeded RNG injected; computed within the CV (§4.2).
+- `scoring.py` — dependency-free `accuracy`/`log_loss`/`neg_log_loss`/`brier_score`/`roc_auc`
+  (rank/Mann-Whitney AUC) under one higher-is-better `Scorer` contract.
+- `tracking.py` — `ExperimentTracker` Protocol + `InMemoryExperimentTracker` (default) +
+  `MLflowExperimentTracker` (thin translation to MLflow's API) + lazy `create_mlflow_tracker`.
+- `tuning.py` — `HyperparameterTuner`: each grid config scored by mean **purged-CV** score,
+  every candidate logged as a trial (the honest DSR count); capacity-modest `default_param_grid`.
+- `core/config.py` + `config/default.yaml` — `ModelConfig` (LightGBM capacity/regularization
+  + purged-CV + calibration/importance + seed + `model_version`); `max_depth > 0` and
+  `num_leaves > 1` encode the §4.2 "shallow, modest capacity" discipline in the schema.
+- `pyproject.toml` — added **`lightgbm>=4.4`** (no pandas pin); mypy overrides for the untyped
+  `lightgbm`/`mlflow`.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (183 files), pre-commit (12
+hooks); `uv lock --check` clean (pandas stays 3.0.3); **786 tests pass (58 new)**; **100%
+coverage** on all eight new modules. Headline asserts on a synthetic *known-signal* dataset:
+OOS AUC > 0.8 computed only on purged out-of-fold predictions; permutation importance ranks
+the true `signal` above `noise`; **calibrated Brier ≤ raw Brier** on the fit set (the isotonic
+guarantee — identity is a feasible monotone fit); the run is logged (params/metrics/
+importances/version tags); the fitted model satisfies the `Model` Protocol; training is
+deterministic per seed. The MLflow adapter is exercised against a faithful fake module, and
+`create_mlflow_tracker`'s missing-dependency path is asserted (reachable in CI).
+
+**Decisions**
+- **MLflow is operator-installed, not a declared dep — exactly the arcticdb call (P1.3).**
+  `uv pip install --dry-run mlflow` would downgrade **pandas 3.0.3 → 2.3.3**, so per the Part
+  II environment policy it must not be a project dependency. It lives behind the
+  `ExperimentTracker` interface, lazily imported and confined to `tracking.py`, with the
+  in-memory tracker as the always-available default. "Runs logged to MLflow" is satisfied by a
+  real adapter, proven against a fake (the same pattern that tests `ArcticRepository` with no
+  arcticdb install). A `test_models_confinement.py` (AST scan) fails CI on any
+  `lightgbm`/`mlflow` import outside `research/models/`.
+- **LightGBM native API (not the sklearn wrapper)** so scikit-learn is *not* dragged in.
+  Combined with hand-rolled PAVA/scoring/MDA, the model stack's only new third-party
+  dependency is `lightgbm` itself — the minimal, auditable surface the project favours.
+- **Isotonic (PAVA) hand-rolled, not sklearn.** A clean, exact algorithm; following the
+  NormalDist-over-SciPy precedent. The calibration set is the pooled purged OOS predictions —
+  leak-free by construction (§4.2's "held-out (purged) set").
+- **Baseline target is binary `{0, 1}`** — the calibratable form the meta bet/no-bet label
+  (§3.4) and a binarized primary side both take. Isotonic calibration of a 3-class side is
+  ill-defined; the binary baseline is what conviction-sizing (Deep Dive #3) actually consumes.
+- **Importance computed within the CV on the test fold, not on training data** (§4.2 — "so the
+  importance isn't itself leaking"); MDA, never MDI (`feature_importances_` is deliberately
+  never read).
+- **Early stopping deferred (not half-built).** Capacity is controlled by the modest config +
+  the purged-CV tuner (which searches `num_leaves`/`min_child_samples`); OOS eval uses a fixed
+  `num_boost_round` so it stays leak-free and deterministic. Early-stopping-on-a-purged-fold
+  is a tracked refinement, not a buried TODO (Ground Rule 4).
+
+**Follow-ups / notes (deferred, tracked)**
+- **Ensemble + regime gate + registry → P2.7** consumes this baseline (LightGBM+XGBoost+linear
+  rank-average/stack, HMM/GMM gate); the `model_version` tag + `ExperimentTracker` are the
+  registry seam. P2.7 final runs are cloud-by-default (Part II compute policy).
+- **DSR honest trial count:** each `RunRecord` (baseline + every tuning trial) is one trial;
+  wiring the tracker's runs into P2.2's `TrialTracker` lands when the kill-gate report (P2.9)
+  assembles the deflation.
+- **Frac-diff / full feature matrix:** the trainer takes a prepared `X`; materializing the
+  P1.6/P1.7 features + P2.5 frac-diff into the training matrix is pipeline orchestration (P2.9).
+- ⚠️ Operator, to use MLflow tracking: `pip install mlflow` in a **pandas<3** environment (it
+  is optional, like arcticdb); the in-memory tracker needs no install.
+
+**Next subtask: P2.7 — Ensemble + regime gate + registry.**
