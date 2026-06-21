@@ -35,10 +35,10 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from quant.core.calendar import IST
 from quant.core.config import LabelingConfig
 from quant.core.logging import get_logger
 from quant.data.store import serde
+from quant.research.labeling import barriers
 from quant.research.labeling.errors import LabelingInputError
 
 _logger = get_logger(__name__)
@@ -119,18 +119,18 @@ class TripleBarrierLabeler:
         times = pd.DatetimeIndex(frame[serde.TIME_COLUMN])
         if not times.is_unique:
             raise LabelingInputError("bars must have unique timestamps")
-        event_positions = _event_positions(events, times)
-        sigma = _aligned_volatility(volatility, times)
+        positions = barriers.event_positions(events, times)
+        sigma = barriers.aligned_volatility(volatility, times)
 
         close = frame["close"].to_numpy(dtype="float64")
         high = frame["high"].to_numpy(dtype="float64")
         low = frame["low"].to_numpy(dtype="float64")
-        session_last = _session_last_position(times)
+        session_last = barriers.session_last_position(times)
 
         rows: list[dict[str, object]] = []
         index: list[pd.Timestamp] = []
         skipped = 0
-        for position in event_positions:
+        for position in positions:
             row = self._label_one(position, close, high, low, sigma, session_last, times)
             if row is None:
                 skipped += 1
@@ -161,27 +161,29 @@ class TripleBarrierLabeler:
         upper_ret = max(self._k_up * float(vol), self._min_return)
         lower_ret = max(self._k_dn * float(vol), self._min_return)
         reference = float(close[position])
-        upper_price = reference * (1.0 + upper_ret)
-        lower_price = reference * (1.0 - lower_ret)
 
-        vertical = int(session_last[position])
-        if self._max_hold > 0:
-            vertical = min(vertical, position + self._max_hold)
+        vertical = barriers.vertical_position(position, int(session_last[position]), self._max_hold)
         if vertical <= position:
             return None  # the event is the session's last bar — no bar left to hold
 
-        for pos in range(position + 1, vertical + 1):
-            hit_up = high[pos] >= upper_price
-            hit_dn = low[pos] <= lower_price
-            if hit_dn:  # stop wins a same-bar tie (intrabar order unknown -> conservative)
-                return _row(times[pos], -1, LOWER, -lower_ret, upper_ret)
-            if hit_up:
-                return _row(times[pos], 1, UPPER, upper_ret, upper_ret)
-
+        # Symmetric (side-agnostic) barriers; the implied position is long, so the stop is
+        # the lower barrier and wins a same-bar tie.
+        touched, exit_pos = barriers.first_touch(
+            high,
+            low,
+            position,
+            vertical,
+            high_barrier=reference * (1.0 + upper_ret),
+            low_barrier=reference * (1.0 - lower_ret),
+            tie_to_low=True,
+        )
+        if touched == barriers.TOUCH_HIGH:
+            return _row(times[exit_pos], 1, UPPER, upper_ret, upper_ret)
+        if touched == barriers.TOUCH_LOW:
+            return _row(times[exit_pos], -1, LOWER, -lower_ret, upper_ret)
         # No barrier touched: the vertical (session-end) barrier resolves it by sign.
         exit_return = float(close[vertical]) / reference - 1.0
-        label = int(np.sign(exit_return))
-        return _row(times[vertical], label, VERTICAL, exit_return, upper_ret)
+        return _row(times[vertical], int(np.sign(exit_return)), VERTICAL, exit_return, upper_ret)
 
 
 def _row(
@@ -189,37 +191,6 @@ def _row(
 ) -> dict[str, object]:
     """Assemble one label row."""
     return {EXIT_TIME: exit_time, LABEL: label, BARRIER: barrier, RETURN: ret, TARGET: target}
-
-
-def _event_positions(events: pd.DatetimeIndex, times: pd.DatetimeIndex) -> list[int]:
-    """Map event timestamps to bar positions (sorted), failing loud on an unknown event."""
-    if not isinstance(events, pd.DatetimeIndex):
-        raise LabelingInputError(f"events must be a DatetimeIndex, got {type(events)}")
-    locations = times.get_indexer(events)
-    if (locations < 0).any():
-        raise LabelingInputError("every event must correspond to a bar timestamp")
-    # De-dup and order by time: a candidate bar yields one label regardless of input order.
-    return sorted({int(loc) for loc in locations})
-
-
-def _aligned_volatility(volatility: pd.Series, times: pd.DatetimeIndex) -> np.ndarray:
-    """Reindex the volatility Series onto the bar timeline (NaN where absent)."""
-    if not isinstance(volatility.index, pd.DatetimeIndex):
-        raise LabelingInputError("volatility must be indexed by bar timestamp (DatetimeIndex)")
-    return volatility.reindex(times).to_numpy(dtype="float64")
-
-
-def _session_last_position(times: pd.DatetimeIndex) -> np.ndarray:
-    """For each bar, the position of the last bar in its IST session (the vertical barrier)."""
-    session = np.asarray(times.tz_convert(IST).date, dtype="object")
-    n = session.shape[0]
-    last = np.empty(n, dtype=np.intp)
-    boundary = n - 1
-    for i in range(n - 1, -1, -1):
-        if i == n - 1 or session[i] != session[i + 1]:
-            boundary = i
-        last[i] = boundary
-    return last
 
 
 def _empty_frame() -> pd.DataFrame:

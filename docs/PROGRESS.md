@@ -44,7 +44,7 @@ Updated at the end of every session.
 | 2026-06-21 | P2.2 CPCV + DSR + PBO | ☑ done | `feat/p2.2-cpcv-dsr-pbo` | 61 new (614 total) | `research/validation/`: `CombinatorialPurgedCV` (φ=C(N,k)·k/N path reconstruction + path-Sharpe distribution), Deflated/Probabilistic Sharpe (`metrics.py`, stdlib `NormalDist` — no SciPy), PBO via CSCV (`pbo.py`), `TrialTracker`. Refactored the purge primitive (`purged_train_mask`) out of `PurgedKFold` for reuse across non-adjacent test groups. 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.3 Labeling: CUSUM + triple-barrier | ☑ done | `feat/p2.3-labeling` | 38 new (652 total) | `research/labeling/`: symmetric `cusum_events` sampler + `TripleBarrierLabeler` (vol-scaled barriers floored at the cost hurdle, high/low first-touch with conservative same-bar stop, vertical = IST session end). `LabelSet.label_times` (t0→t1) feeds the purged CV/CPCV splitters; `.sides` is the primary label. 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.4 Sample weighting | ☑ done | `feat/p2.4-sample-weighting` | 36 new (688 total) | `research/labeling/`: `SampleWeights` (indicator matrix → concurrency, average-uniqueness, return-attribution) + `time_decay_weights`; uniqueness-aware `sequential_bootstrap` (+ `average_uniqueness_of_sample` diagnostic, seeded RNG). Corrects non-IID overlapping labels (AFML ch. 4). 100% cov on new modules. See notes. |
-| | P2.5 Meta-labeling + fractional differentiation | ☐ todo | | | |
+| 2026-06-21 | P2.5 Meta-labeling + fractional differentiation | ☑ done | `feat/p2.5-meta-fracdiff` | 40 new (728 total) | `research/labeling/`: `momentum_side`/`mean_reversion_side` primary rules + `MetaLabeler` (side-aware bet/no-bet via a shared `barriers.first_touch`); `research/features_research/`: `frac_diff` (binomial FFD) + `adf_test` (statsmodels) + `min_ffd` (min-d stationary, retains memory). Added `statsmodels` dep (resolves with pandas 3.x). 100% cov on new modules. See notes. |
 | | P2.6 Model: baseline + tracking + calibration | ☐ todo | | | |
 | | P2.7 Ensemble + regime gate + registry | ☐ todo | | | |
 | | P2.8 Robustness battery + two-engine reconciliation | ☐ todo | | | |
@@ -1269,3 +1269,78 @@ average uniqueness** over 40 seeds (§4.5.3's promise) and is deterministic per 
   indexed by the bar timeline); the module is data-source-agnostic.
 
 **Next subtask: P2.5 — Meta-labeling + fractional differentiation.**
+
+### 2026-06-21 — P2.5 Meta-labeling + fractional differentiation ☑
+
+**Goal:** the side/size split (meta-labeling) + stationary-but-memory-preserving features
+(fractional differentiation). Builds on P2.3 (triple barrier) and P1.7 (features).
+
+**Reference (Ground Rule 9):** Deep Dive #2 §3.4 (meta-labeling: primary → SIDE tuned for
+recall; secondary → BET/NO-BET, "the natural home for the cost hurdle"; the primary can be
+a simple rule), §3.6 (fractional differentiation: the dimmer switch between raw (d=0,
+memory, non-stationary) and returns (d=1, stationary, memoryless); find the **minimum d**
+that passes ADF, preserving maximum memory). Methodology from López de Prado *Advances in
+Financial ML* ch. 3 (meta-labels) and ch. 5 (frac-diff, fixed-width-window §5.5).
+
+**Delivered:**
+- `research/labeling/meta.py` — `momentum_side` / `mean_reversion_side` (simple primary
+  rules: sign of the trailing move) + `MetaLabeler(config).label(bars, events, sides,
+  volatility) → MetaLabelSet`. **Side-aware** barriers (a long takes profit above / stops
+  below; a short mirrors it), labeled **1 = bet won** (profit-take, or profitable at the
+  vertical) / **0 = no-bet** (stop, or unprofitable); `ret` is **side-adjusted** (a
+  profitable short is positive). Flat sides are skipped. `label_times` / `meta_labels` /
+  `sides` accessors.
+- `research/labeling/barriers.py` — extracted the shared first-touch scan (with the
+  conservative same-bar **stop-wins** tie, parameterized by which side is the stop) plus the
+  event-position / volatility-alignment / session-end helpers. **Refactored P2.3's
+  `TripleBarrierLabeler` to use it** — one implementation of the correctness-critical
+  invariant for both the primary and meta labelers (Ground Rule 4). P2.3 tests unchanged.
+- `research/features_research/frac_diff.py` — `frac_diff_weights` (binomial
+  `w_k = -w_{k-1}(d-k+1)/k`), `frac_diff` (fixed-width-window, **causal** via `np.convolve`),
+  `adf_test` (statsmodels `adfuller` wrapper → `ADFResult.is_stationary`), and `min_ffd`
+  (searches the d-grid for the smallest stationary order; skips candidates whose window
+  exceeds a short series).
+- `pyproject.toml` — added **`statsmodels>=0.14`** (+ scipy, patsy) for the ADF test; mypy
+  override for the partial stubs.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (167 files), pre-commit
+(12 hooks); `uv lock --check` clean (pandas stays 3.0.3); **728 tests pass (40 new)**;
+**100% coverage** on all new modules. Meta labels hand-computed for long & short
+profit/stop/vertical (+ the short same-bar conservative stop, exercising the `tie_to_low`
+flip); frac-diff weights (d=0 → [1], d=1 → [1,-1]), d=1 == first difference; **min_ffd finds
+a fractional d that passes ADF while a random walk's raw series does not, and the
+differenced series keeps materially more correlation with the level than returns do** (the
+§3.6 memory-retention property).
+
+**Decisions**
+- **statsmodels for ADF, not hand-rolled.** Checked first that `statsmodels` resolves with
+  the project's pinned **pandas 3.0.3** — it does (adds scipy + patsy, no pandas downgrade),
+  so the environment policy (don't force a project-wide pin) is satisfied. Reimplementing a
+  unit-root test with correct critical values is exactly the kind of well-tested routine
+  Ground Rule 4 says not to reinvent; §4b.8 references statsmodels. (This does *not* reverse
+  P2.2's "no SciPy just for a normal CDF" — there stdlib sufficed; ADF genuinely needs it.)
+  Import confined to `frac_diff.py`.
+- **Refactor over duplicate for the barrier scan.** The conservative same-bar tie is a
+  correctness-critical invariant; rather than copy it into the meta labeler, extracted
+  `barriers.first_touch` (parameterized by which side is the stop) and pointed both labelers
+  at it. P2.3's behavior and tests are unchanged (verified).
+- **Meta-labeling is a side-aware triple barrier.** Given the primary's side, the profit-take
+  is in the side's direction and the stop against it; a short's barriers mirror a long's, and
+  the realized return is side-adjusted. The meta label is the natural bet/no-bet target a
+  secondary classifier learns (P2.6), and `label_times` feeds the purged CV/CPCV (verified).
+- **Frac-diff is causal (fixed-width window).** The value at *t* uses only `y_{t-k}` (a
+  `np.convolve` of the trailing window with the truncated weights), so it is point-in-time
+  correct like the Layer-1 features; the first `W` bars are NaN warm-up. `min_ffd` skips a
+  small-d candidate whose window is wider than the series (too few points to ADF-test) rather
+  than crashing.
+
+**Follow-ups / notes (deferred, tracked)**
+- **Model stack → P2.6** trains the LightGBM baseline on the primary-side label *or* the
+  meta bet/no-bet label, with the P2.4 sample weights, under purged CV; isotonic calibration
+  of the meta-probability for sizing (Deep Dive #3).
+- **Frac-diff as a feature** is wired into the feature matrix at materialization (apply
+  `min_ffd` to the log-price series; the `d` and threshold become feature-set version params).
+- **Primary-rule lookback** is an explicit arg (no hard-coded default); the operator/research
+  sweeps it. A model primary (not just a rule) also fits the `sides` contract.
+
+**Next subtask: P2.6 — Model: baseline + tracking + calibration.**
