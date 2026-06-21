@@ -20,6 +20,7 @@ dependencies = [
     "kiteconnect>=4.2,<6", # Zerodha Kite Connect SDK, confined to data/brokers/ (P1.1)
     "pyarrow>=16",         # Parquet engine for the immutable raw archive tier (P1.3)
     "ta-lib>=0.6.8",       # technical indicators, never hand-rolled; prebuilt wheels incl. manylinux (P1.7)
+    "statsmodels>=0.14",   # ADF stationarity test for min-d fractional differentiation (P2.5); resolves with pandas 3.x
 ]
 
 # Optional storage backends, confined to data/store/ and imported lazily (P1.3).
@@ -133,6 +134,12 @@ ignore_missing_imports = true
 # data/features/technical.py behind our own typed Series wrappers.
 [[tool.mypy.overrides]]
 module = ["talib"]
+ignore_missing_imports = true
+
+# statsmodels ships only partial type information; its use is confined to
+# research/features_research/frac_diff.py (the ADF stationarity test).
+[[tool.mypy.overrides]]
+module = ["statsmodels.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- #

@@ -9,7 +9,11 @@ whose ``label`` is the primary side.
 P2.4 adds sample weighting for non-IID labels (§3.5): concurrency / average-uniqueness and
 return-attribution weights plus time-decay (:mod:`~quant.research.labeling.weights`), and
 the uniqueness-aware sequential bootstrap (:mod:`~quant.research.labeling.bootstrap`).
-Meta-labeling (P2.5) builds on this output.
+
+P2.5 adds meta-labeling (§3.4): a simple momentum / mean-reversion primary side and the
+side-aware bet/no-bet `MetaLabeler` (:mod:`~quant.research.labeling.meta`). The barrier-scan
+primitives shared with the primary labeler live in
+:mod:`~quant.research.labeling.barriers`.
 """
 
 from quant.research.labeling.bootstrap import (
@@ -18,6 +22,12 @@ from quant.research.labeling.bootstrap import (
 )
 from quant.research.labeling.cusum import cusum_events
 from quant.research.labeling.errors import LabelingError, LabelingInputError
+from quant.research.labeling.meta import (
+    MetaLabeler,
+    MetaLabelSet,
+    mean_reversion_side,
+    momentum_side,
+)
 from quant.research.labeling.triple_barrier import (
     BARRIER,
     EVENT_TIME,
@@ -36,10 +46,14 @@ __all__ = [
     "LabelSet",
     "LabelingError",
     "LabelingInputError",
+    "MetaLabelSet",
+    "MetaLabeler",
     "SampleWeights",
     "TripleBarrierLabeler",
     "average_uniqueness_of_sample",
     "cusum_events",
+    "mean_reversion_side",
+    "momentum_side",
     "sequential_bootstrap",
     "time_decay_weights",
 ]
