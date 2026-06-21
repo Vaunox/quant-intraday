@@ -46,6 +46,7 @@ No magic numbers, paths, credentials, thresholds, or environment assumptions in 
 - **Secrets are never in code or config files.** API keys, secrets, tokens, and credentials come only from a secrets manager / environment variables, accessed through a single `secrets` interface. They are never committed, never logged, never embedded in the client app.
 - **Named constants** for anything fixed (e.g. NSE session times) — defined once, in `core/`, and imported. If a value might ever change or differ by environment, it is config, not a literal.
 - **Test:** searching the source for hard-coded numbers, paths, or credentials should return essentially nothing in business logic.
+- **OS-portable code, always.** All path handling must use `pathlib.Path` (or `os.path` equivalents) — never hardcode `\` or `/` separators or platform-specific path strings. Subprocess and shell invocations must work on both Windows (dev) and Linux (deployment); when OS-specific commands are unavoidable (e.g., venv activation), document both variants. No imports of platform-only stdlib modules (`fcntl`, `winreg`, etc.) in shared business logic. A test for OS-portability is: would this code path run identically inside the CI Ubuntu container and on the operator's Windows dev box? If not, it must be refactored.
 
 ## 3. Standard Structure
 
@@ -224,6 +225,7 @@ An automated system that trades **liquid Indian cash equities intraday (MIS)** o
 | Leverage (v1) | None (gross ≤ 1x) | Leverage magnifies a small, uncertain edge into ruin |
 | App stack | PWA → APK (Bubblewrap/TWA); Flutter later | Single codebase, fastest; native push later |
 | Language/tooling | Python; ruff+black, mypy, pytest, pre-commit, CI | Standard, proven |
+| Production deployment OS | Linux (Ubuntu LTS) in AWS ap-south-1 | ~50–60% cost saving vs Windows for the same instance class; native fit for systemd, Docker, SSM Session Manager, CloudWatch agent; matches the Phase-8 runbook in Part II's Cloud compute policy. Windows server deployment is explicitly out of scope. Dev machine OS (operator) is unconstrained — Windows, Linux, or macOS all work; CI runs Ubuntu to guarantee Linux parity on every push. |
 
 ## Environment policy (research vs engine)
 
@@ -594,6 +596,8 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 - **Deliverable:** repo with the Part-I folder structure, `pyproject.toml` (deps + ruff/black/mypy/pytest config), `.pre-commit-config.yaml`, `.gitignore` (secrets/, data/, models/, .env), `.github/workflows/ci.yml` (lint + type-check + test), `README.md`.
 - **Done when:** `pre-commit` runs clean; CI passes on an empty test; `mypy` and `ruff` configured and green; folder structure matches Part I.
 - **Reference:** Part I (3, 6, 7).
+
+> **Portability note:** the development workflow must work on Windows, Linux, and macOS. CI already runs on Ubuntu, providing automatic Linux parity verification on every push. The production deployment target is Linux per Part II's locked-decisions table. All code must satisfy Ground Rule 2's OS-portability bullet.
 
 #### P0.2 — Configuration & secrets system
 - **Goal:** layered config loader + secrets interface; zero hard-coding.
