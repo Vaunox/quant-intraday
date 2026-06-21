@@ -42,7 +42,7 @@ Updated at the end of every session.
 |---|---|---|---|---|---|
 | 2026-06-21 | P2.1 Validation harness core (purged CV + cost backtester) | ☑ done | `feat/p2.1-validation-harness` | 72 new (553 total) | `research/validation/`: `PurgedKFold` (purge + embargo, strict no-overlap), `IndianCostModel` (itemised per-order brokerage/STT/exchange/SEBI/stamp/GST), `DepthAwareSlippage` (size-vs-liquidity participation curve), `Backtester` (event-driven, next-bar-open, intraday square-off, costs+slippage, latency). 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.2 CPCV + DSR + PBO | ☑ done | `feat/p2.2-cpcv-dsr-pbo` | 61 new (614 total) | `research/validation/`: `CombinatorialPurgedCV` (φ=C(N,k)·k/N path reconstruction + path-Sharpe distribution), Deflated/Probabilistic Sharpe (`metrics.py`, stdlib `NormalDist` — no SciPy), PBO via CSCV (`pbo.py`), `TrialTracker`. Refactored the purge primitive (`purged_train_mask`) out of `PurgedKFold` for reuse across non-adjacent test groups. 100% cov on new modules. See notes. |
-| | P2.3 Labeling: CUSUM + triple-barrier | ☐ todo | | | |
+| 2026-06-21 | P2.3 Labeling: CUSUM + triple-barrier | ☑ done | `feat/p2.3-labeling` | 38 new (652 total) | `research/labeling/`: symmetric `cusum_events` sampler + `TripleBarrierLabeler` (vol-scaled barriers floored at the cost hurdle, high/low first-touch with conservative same-bar stop, vertical = IST session end). `LabelSet.label_times` (t0→t1) feeds the purged CV/CPCV splitters; `.sides` is the primary label. 100% cov on new modules. See notes. |
 | | P2.4 Sample weighting | ☐ todo | | | |
 | | P2.5 Meta-labeling + fractional differentiation | ☐ todo | | | |
 | | P2.6 Model: baseline + tracking + calibration | ☐ todo | | | |
@@ -1131,3 +1131,78 @@ timeline once** (marker==position) and **draw each group from a distinct split**
   `path_distribution` already take `periods_per_year`.
 
 **Next subtask: P2.3 — Labeling: CUSUM + triple-barrier.**
+
+### 2026-06-21 — P2.3 Labeling: CUSUM + triple-barrier ☑
+
+**Goal:** honest, event-sampled, volatility-scaled labels — a CUSUM event sampler and a
+triple-barrier labeler whose `label_times` (event `t0` → resolution `t1`) feed the P2.1/P2.2
+purged-CV / CPCV splitters and whose `label` is the primary side. (Meta-labeling is P2.5,
+sample weighting P2.4, frac-diff P2.5 — this subtask is the primary label only.)
+
+**Reference (Ground Rule 9):** Deep Dive #2 §3.2 (triple-barrier: label by the first of
+three barriers touched — path-dependence is the point; **vol-scaled** `k_up·σ` / `k_dn·σ`
+with asymmetric multiples; the profit-take must **clear the cost hurdle** so a +1 is a
+tradeable win; **vertical barrier = session end** since MIS auto-squares-off), §3.3 (CUSUM
+event sampling — "sample when something is happening", removes dead bars, more balanced
+labels). Methodology from López de Prado *Advances in Financial ML* ch. 2-3.
+
+**Delivered (`src/quant/research/labeling/`):**
+- `cusum.py` — `cusum_events(prices, threshold)`: the symmetric CUSUM filter (AFML
+  §2.5.2.1) over per-bar log returns; two zero-floored accumulators, an event + reset when
+  either reaches `h`; scalar **or** per-bar Series threshold (dynamic/vol-scaled). Single
+  causal pass; returns the event `DatetimeIndex`.
+- `triple_barrier.py` — `TripleBarrierLabeler(config).label(bars, events, volatility) →
+  LabelSet`. Reference = event-bar close; barriers `max(k·σ, min_return)` (cost-hurdle
+  floor); forward path scanned via **high/low first-touch** (honest intrabar stops); a
+  same-bar breach of *both* resolves to the **stop** (conservative — order unknown);
+  vertical barrier = **IST session end** (no overnight), optionally capped by
+  `max_hold_bars`, labeled by the sign of the return. `LabelSet.label_times` (t0→t1) and
+  `.sides` (+1/-1/0) are the typed accessors for downstream.
+- `errors.py` — `LabelingError` / `LabelingInputError`.
+- `core/config.py` + `config/default.yaml` — `LabelingConfig` (cusum_threshold,
+  barrier_upper/lower_multiple, barrier_min_return, vertical_max_hold_bars); config not
+  literals (Ground Rule 2), seeded +2σ/-1.5σ, 0.2% floor, session-end vertical.
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (157 files), pre-commit
+(12 hooks); **652 tests pass (38 new)**; **100% coverage** on all new `research/labeling`
+modules. Outcomes hand-computed on synthetic OHLC paths (upper/lower at the exact barrier
+return; vertical by sign; same-bar tie → stop; first-touch ordering; vol scaling; the
+0.2% floor; session-end vertical never carries into the next day; max-hold cap; warm-up /
+last-bar skips). `LabelSet.label_times` is fed through `PurgedKFold` (the contract proof).
+
+**Decisions**
+- **Barriers from the event bar's close; volatility injected.** The reference is `close[t0]`
+  (the decision price) and the barrier *widths* use only `σ` at `t0` (point-in-time — no
+  future data leaks into the barrier). `σ` is an injected return-unit trailing volatility
+  (e.g. `realized_volatility`), reusing the leakage-tested feature rather than recomputing.
+  The label's *resolution* legitimately reads the future path — the leakage rule constrains
+  features, not a label's own outcome.
+- **High/low first-touch, conservative same-bar tie.** Stops are honest (a bar's low
+  breaching the stop is a stop, even if it later recovers). When one bar gaps through both
+  barriers the intrabar order is unknown, so the **stop wins** — this slightly under-counts
+  +1, the safe direction (we'd rather underestimate edge). Documented.
+- **Vertical = IST session end, by sign.** One IST date = one session (same convention as
+  the VWAP feature and the P2.1 backtester), so a position never carries overnight; the
+  vertical label is the sign of the close-to-close return (§3.2's "sign of the return at
+  expiry"). The cost-hurdle/no-bet decision is the meta-model's job (P2.5); here the
+  *barrier widths* already encode the cost floor.
+- **Labels ≠ backtest P&L (separation of concerns).** The labeler answers "does an up- or
+  down-move materialise from this decision price?"; the P2.1 backtester (next-bar-open +
+  costs + slippage) measures tradeable P&L. They share the session/no-overnight rule but
+  not the exact entry price, by design.
+- **DataFrame-centric `LabelSet`.** Matches the codebase's result-object style
+  (BacktestResult/GapReport); `label_times`/`sides` are tz-aware and drop straight into the
+  splitter contract (`_validate_label_times` accepts them — verified).
+
+**Follow-ups / notes (deferred, tracked)**
+- **Sample weighting → P2.4** (concurrency/uniqueness, time-decay, return-attribution)
+  consumes `LabelSet.label_times` (overlap) and `ret` (attribution).
+- **Meta-labeling → P2.5** uses a primary side (a simple rule or model) + these barriers to
+  generate bet/no-bet labels; frac-diff features land there too.
+- **CUSUM dynamic threshold** can be wired to a trailing-vol Series (the `threshold: Series`
+  path exists); the default is the configured scalar.
+- **σ source**: callers pass `realized_volatility(bars, features.volatility_window)`
+  re-indexed by timestamp; the labeler stays vol-source-agnostic (ATR/EWMA also fit, in
+  return units).
+
+**Next subtask: P2.4 — Sample weighting.**
