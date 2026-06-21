@@ -41,7 +41,7 @@ Updated at the end of every session.
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
 | 2026-06-21 | P2.1 Validation harness core (purged CV + cost backtester) | ☑ done | `feat/p2.1-validation-harness` | 72 new (553 total) | `research/validation/`: `PurgedKFold` (purge + embargo, strict no-overlap), `IndianCostModel` (itemised per-order brokerage/STT/exchange/SEBI/stamp/GST), `DepthAwareSlippage` (size-vs-liquidity participation curve), `Backtester` (event-driven, next-bar-open, intraday square-off, costs+slippage, latency). 100% cov on new modules. See notes. |
-| | P2.2 CPCV + DSR + PBO | ☐ todo | | | |
+| 2026-06-21 | P2.2 CPCV + DSR + PBO | ☑ done | `feat/p2.2-cpcv-dsr-pbo` | 61 new (614 total) | `research/validation/`: `CombinatorialPurgedCV` (φ=C(N,k)·k/N path reconstruction + path-Sharpe distribution), Deflated/Probabilistic Sharpe (`metrics.py`, stdlib `NormalDist` — no SciPy), PBO via CSCV (`pbo.py`), `TrialTracker`. Refactored the purge primitive (`purged_train_mask`) out of `PurgedKFold` for reuse across non-adjacent test groups. 100% cov on new modules. See notes. |
 | | P2.3 Labeling: CUSUM + triple-barrier | ☐ todo | | | |
 | | P2.4 Sample weighting | ☐ todo | | | |
 | | P2.5 Meta-labeling + fractional differentiation | ☐ todo | | | |
@@ -1050,3 +1050,84 @@ asserted directly on overlapping label windows.
   calculator; these change"* (§4b.6). They live in `config.costs` for exactly that reason.
 
 **Next subtask: P2.2 — CPCV + DSR + PBO.**
+
+### 2026-06-21 — P2.2 CPCV + DSR + PBO ☑
+
+**Goal:** the "is the edge real?" toolkit — Combinatorial Purged CV with path
+reconstruction, the Deflated Sharpe Ratio, and the Probability of Backtest Overfitting,
+plus honest trial-count tracking. Builds on P2.1's purged-CV + backtester.
+
+**Reference (Ground Rule 9):** Deep Dive #2 §4b.2 (CPCV: N groups, k test → C(N,k)
+splits → **φ = C(N,k)·k/N = C(N-1,k-1)** complete paths; judge the *distribution* of
+path-Sharpes — narrow & positive = robust, wild variance = fragile), §4b.3 (Deflated
+Sharpe: corrects an observed Sharpe for trial count, skew, kurtosis, sample length;
+"honestly track your trial count"), §4b.4 (PBO via CSCV: probability the IS-best config
+underperforms the OOS median; "> ~0.2-0.5 is a serious warning"; t-stat hurdle ~3.0).
+Methodology from López de Prado *Advances in Financial ML* ch. 7-8 and Bailey-López de
+Prado (DSR/PSR) / Bailey-Borwein-LdP-Zhu (PBO/CSCV).
+
+**Delivered (`src/quant/research/validation/`):**
+- `cpcv.py` — `CombinatorialPurgedCV(n_groups, n_test_groups, embargo_pct)`:
+  `num_splits`=C(N,k), `num_paths`=C(N-1,k-1); `split()` yields `CombinatorialSplit`
+  (purged+embargoed train, k-group test); `reconstruct_paths()` tiles per-split OOS
+  returns into φ full-timeline paths (each group drawn from a distinct split);
+  `path_distribution()` → `PathDistribution` (median / minimum / std / fraction_negative —
+  the kill-gate read surface); `run(label_times, backtest_fn)` does split→backtest→paths
+  end-to-end.
+- `metrics.py` — `sharpe_ratio` (per-obs or annualised), `return_moments`,
+  `probabilistic_sharpe_ratio`, `expected_maximum_sharpe_ratio` (the DSR deflation
+  benchmark), `deflated_sharpe_ratio` (+ `_from_returns`). Uses stdlib
+  `statistics.NormalDist` for the normal CDF/quantile — **no SciPy dependency added**.
+- `pbo.py` — `probability_of_backtest_overfitting(performance, n_partitions)`: the full
+  CSCV algorithm over C(S, S/2) IS/OOS partitions → `PBOResult` (pbo + per-combination
+  logits).
+- `trials.py` — `TrialTracker`: de-duplicated-by-name trial log providing the DSR's
+  `count` (N) and `sharpe_variance` (V), in per-observation Sharpe units.
+- `splits.py` (refactor) — extracted `purged_train_mask(starts, ends, test_mask, embargo)`
+  + `_contiguous_runs`; `PurgedKFold` now composes it, and CPCV reuses it for test sets
+  that span several (possibly non-adjacent) groups. `_validate_label_times` shared too.
+- `errors.py` — `MetricError`, `PBOError` (CPCV reuses `SplitError`).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (152 files), pre-commit
+(12 hooks); **614 tests pass (61 new)**; **100% coverage** on every `research/validation`
+module (whole package). DSR/PSR/expected-max checked against an **independent assembly of
+the reference formulas** via `NormalDist`; CPCV path counts verified for five (N,k) plus
+the φ=C(N-1,k-1) identity across all valid (N,k); path reconstruction proven to **tile the
+timeline once** (marker==position) and **draw each group from a distinct split**
+(marker==split-index); PBO behaviourally validated (dominant strategy → ≈0, pure noise →
+≈0.5, engineered overfit → high) plus structural/fail-loud checks.
+
+**Decisions**
+- **stdlib `NormalDist`, not SciPy.** PSR/DSR need only the normal CDF and quantile, both
+  on `statistics.NormalDist` (Py 3.8+, ~1e-14 accurate). Avoids adding SciPy to the engine
+  env (Part II environment policy: keep runtime deps lean) while honouring "understand the
+  math, don't black-box it" (§4b.8).
+- **Path reconstruction is decoupled from the backtest.** CPCV gives the splits + the
+  path-assignment grid; the caller supplies per-split OOS returns (its P2.1 `Backtester`
+  output). This keeps P2.2 the pure *math* (testable with synthetic returns) and lets P2.6
+  / P2.9 wire the real model+backtester through `run()`.
+- **DSR uses per-observation (non-annualised) Sharpes.** The formula's √(T-1) carries the
+  sample-length scaling, so the observed Sharpe and the trial variance V must share those
+  units — `TrialTracker.record_returns` defaults to non-annualised for exactly that
+  consistency. Annualised Sharpes are for the CPCV path distribution / kill-gate threshold.
+- **Refactor over duplicate.** Rather than reimplement purge+embargo for CPCV's multi-group
+  test sets, extracted the P2.1 logic into `purged_train_mask` (composes per contiguous
+  run, AND across runs) — one audited no-overlap primitive, used by both splitters
+  (Ground Rule 4). PurgedKFold's existing tests still pass unchanged.
+- **PBO uses Sharpe as the CSCV metric** (the BBLZ default), relative rank with ties
+  averaged so the logit is always finite; `PBO = mean(logit <= 0)` (matches the mlfinlab
+  reference convention, counting the exact-median boundary as overfit).
+
+**Follow-ups / notes (deferred, tracked)**
+- **Triple-barrier labels → P2.3** produce the real `label_times` (t0→t1) these splitters
+  consume; today's tests synthesise them.
+- **Kill-gate emitter → P2.9** reads `PathDistribution.median`/`minimum`/`fraction_negative`
+  (criteria 1 & 4), the DSR (criterion 2), and PBO (criterion 3) into the seven-point
+  pass/fail verdict.
+- **MLflow trial logging → P2.6** replaces/augments the in-memory `TrialTracker` for the
+  honest, persisted trial count (§4b.8); the interface (count + variance) stays the same.
+- **Annualisation factor** for intraday path-Sharpes (periods-per-year for a 15-min,
+  intraday-only clock) is a kill-gate calibration detail for P2.9; `sharpe_ratio` /
+  `path_distribution` already take `periods_per_year`.
+
+**Next subtask: P2.3 — Labeling: CUSUM + triple-barrier.**

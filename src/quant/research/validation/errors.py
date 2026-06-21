@@ -28,3 +28,19 @@ class BacktestError(ValidationError):
     For example multi-symbol bars in the single-symbol core, a target position
     indexed at a timestamp with no matching bar, or a non-integer share target.
     """
+
+
+class MetricError(ValidationError):
+    """A performance-statistic input is invalid.
+
+    For example a Deflated/Probabilistic Sharpe Ratio asked for on fewer than two
+    observations, or a negative trial variance.
+    """
+
+
+class PBOError(ValidationError):
+    """A Probability-of-Backtest-Overfitting (CSCV) input is malformed.
+
+    For example an odd number of CSCV partitions, fewer rows than partitions, or a
+    performance matrix with fewer than two candidate strategies.
+    """
