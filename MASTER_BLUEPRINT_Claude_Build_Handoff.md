@@ -251,6 +251,129 @@ This policy is referenced by the dependency choices in **P1.3** (Parquet + Redis
 base engine deps; ArcticDB operator-installed in research) and should guide every future
 "should I add this dep?" decision.
 
+## Cloud compute policy (AWS)
+
+**Default: local.** Training, research, and validation run on the operator's machine. The cloud is rented only when a specific, justified need exists — never as the default for compute.
+
+**Two legitimate cloud uses, and only these:**
+
+1. **Heavy one-shot research runs** — final P2.7 stack runs and the full P2.8 CPCV + robustness battery; periodic walk-forward retrains in Phase 5. Spin up → run → fetch artifacts → terminate. **Always spot, always time-bounded.**
+2. **The live engine + supporting services in Phase 8** — fixed-IP VPS in `ap-south-1` (Mumbai) hosting the engine, control API, and MLflow tracking server. This is **required by SEBI's static-IP rule**, not optional.
+
+### One-time setup (do once, before first cloud use)
+
+**Account hygiene:**
+- **Region: `ap-south-1` (Mumbai)** — non-negotiable for the live engine (latency to NSE); use it for research runs too so data transfer to/from the engine is free.
+- **Never use the root account** for project work. Create a dedicated IAM user, enable MFA on both root and the IAM user, lock root credentials away, and operate via the IAM user only.
+- Programmatic access keys live only in the secrets interface (`core/secrets.py`) or AWS Secrets Manager — never in code, config files, environment files in git, or the repo.
+- **IMDSv2 required** on every EC2 instance launched (`HttpTokens=required`) — prevents SSRF metadata theft.
+
+**Cost guardrails (do these on Day 1 — they pay for themselves the first time something is misconfigured):**
+- AWS Budgets: a monthly **hard budget alert** at 50%, 80%, and 100% of the available credit balance, with email notifications.
+- A **CloudWatch billing alarm** independent of Budgets as a backup.
+- **A "kill-all" runbook in `docs/`** — exact CLI commands to terminate every project EC2 instance and release unused EIPs if cost ever spikes unexpectedly. Test it once.
+- **Free-tier awareness:** before introducing a new service, check whether a free-tier alternative exists; document the choice in `docs/PROGRESS.md` if you pick the paid one.
+- **Mandatory tags on every resource:** `project=quant-intraday`, `purpose={research|engine|mlflow|...}`, `lifecycle={ephemeral|persistent}`. Set a tag policy so untagged resources are flagged.
+
+**Networking — read this before launching anything, because mistakes here are how credits evaporate:**
+- **NAT Gateway is the #1 silent cost.** ~$0.045/hour + per-GB egress. If the live engine sits in a private subnet pulling market data through a NAT, that's ~$33/month minimum + data transfer. For Phase 8 engine: put it in a **public subnet with an Elastic IP** (the EIP is required anyway for the static-IP whitelist) and a **strict security group** — no NAT needed, and no extra cost. Document this choice in the runbook so no one "improves" it later.
+- **Outbound data transfer costs money** (~$0.09/GB out of `ap-south-1`). Keep S3, EC2, and MLflow all in `ap-south-1` so intra-region transfer is free. Never transfer raw market data to another region.
+- **VPC Endpoints for S3** (Gateway endpoint — *free*) so EC2 → S3 traffic never traverses the public internet or NAT. Enable this in the default VPC for the project.
+
+**Storage:**
+- One project S3 bucket, versioning **on**, default encryption **on** (SSE-S3 minimum).
+- **S3 Lifecycle rules:** transition raw archive to Glacier after 90 days; expire incomplete multipart uploads after 7 days (silent storage leak otherwise); expire old `runs/` artifacts older than 1 year unless tagged `keep=true`.
+- **Block all public access** at the account and bucket level.
+
+### Standard runbook — heavy research run (e.g. final P2.7, P2.8)
+
+**Pre-launch checklist — verify each item before clicking Launch:**
+- [ ] Region is `ap-south-1`.
+- [ ] Instance type is a **spot request**, not on-demand (confirm in the request).
+- [ ] AMI is the project's pinned base image (or Ubuntu LTS with the env Docker pulled at boot).
+- [ ] **No public IPv4** unless strictly needed; access via **AWS Systems Manager Session Manager (SSM)** instead of SSH keys (no inbound port required, audit-logged, no key management).
+- [ ] Security group: outbound to S3/internet only; **no inbound from `0.0.0.0/0`**.
+- [ ] IAM instance profile attached with **least-privilege** — read project S3 prefix, write runs prefix, nothing else.
+- [ ] **IMDSv2 enforced**.
+- [ ] Root volume encrypted; tags applied; `lifecycle=ephemeral`.
+- [ ] CloudWatch agent configured to ship logs.
+
+**Run:**
+1. Build a Docker image with the engine env pinned to the same versions as local (reproducibility).
+2. Launch the spot instance per the checklist.
+3. Pull data + code from the private S3 prefix; never embed credentials in the AMI — use the IAM instance profile.
+4. Run the job; stream logs to CloudWatch; write artifacts (MLflow runs, validation reports, model files) **directly to S3 as they're produced**, not only at the end — spot instances can be reclaimed with 2 minutes' notice, and unsaved work is gone.
+5. Implement **graceful shutdown handling**: trap SIGTERM, flush current artifacts to S3, log the partial state, exit cleanly. Jobs must be safe to interrupt and resume.
+
+**Pre-termination checklist — verify each item before clicking Terminate:**
+- [ ] Final artifacts confirmed in S3 (`aws s3 ls` against the runs prefix).
+- [ ] CloudWatch logs flushed and visible in the console.
+- [ ] MLflow run is closed with status set (`FINISHED` / `FAILED`), not left `RUNNING`.
+- [ ] Cost recorded in `docs/PROGRESS.md` for the subtask.
+- [ ] Any attached EBS volumes set to delete-on-termination (otherwise they persist and silently charge).
+- [ ] Elastic IP (if any) released — an unattached EIP charges ~$3.60/month.
+- [ ] No other resources from this run still running (a stray Lambda, ECR push job, etc.).
+
+**Terminate the instance.** Spot does not auto-stop on idle; an unmonitored instance is a credit leak. Most credit-loss stories start with "I forgot it was running."
+
+### Standard runbook — Phase-8 live engine VPS
+
+- **Sizing:** smallest instance that meets engine CPU/RAM needs (`t3.small` or `t3.medium` usually suffices — engine is I/O-bound). Use `t4g` (ARM) if all dependencies are ARM-compatible — meaningfully cheaper.
+- **Public subnet, Elastic IP attached** — saves NAT cost and provides the static IP needed for the SEBI register-with-broker step. **Once registered with Kite, the EIP must not change** (losing it means re-registering, lost trading days).
+- **Register the EIP with Kite Connect** in the broker developer console as the static IP for order placement (Layer 5 morning auth routine assumes this is done).
+- Engine runs under **systemd** with `Restart=always`; logs ship to CloudWatch; metrics flow to the operations layer's dashboard (Layer 5).
+- **EBS root encrypted at rest; daily AWS Backup snapshots; restore tested once per quarter** (an untested backup is not a backup).
+- Secrets (broker API key/secret, daily access token, Telegram bot token, etc.) injected via environment from **AWS Secrets Manager** — never baked into the AMI, never in git. Rotate as appropriate.
+- **Security group:** inbound only the ports the control API needs, and only from the VPN/private network (per Layer 6 security model). Kite API and broker traffic are outbound only.
+- **Control API reachable only over the VPN** — never publicly routed. Per Layer 6.
+- **Daily auth flow** (Layer 5 morning routine): the manual TOTP seed at ~7:30 AM IST writes the fresh access token into Secrets Manager; the engine reads from there. Document the runbook in `docs/`.
+- **IMDSv2 enforced; no SSH key pair** — use SSM Session Manager.
+- **CloudTrail enabled** on the account for audit (SEBI traceability).
+
+### Iteration discipline (the rule that protects the credit budget)
+
+For research subtasks the policy marks as cloud-by-default (currently P2.7 and P2.8): **only *final* runs go to cloud**. Iterative development — tweaking features, hyperparameters, label/weight schemes, debugging a fold — stays local.
+
+A run qualifies as a "final" cloud run only if **all** of the following hold:
+- The code, config, data version, and feature version are pinned and committed to git.
+- A short local smoke run (small universe or fold subset) has completed successfully on the same code path within the last 24 hours.
+- The artifacts produced will be promoted to the model registry or fed into the kill-gate report — not thrown away as exploratory.
+- The operator has been notified of the planned cloud run, its expected duration, and its expected cost in `docs/PROGRESS.md`.
+
+Counter-examples — these stay **local**, regardless of the subtask's default:
+- "Let me try one more feature subset and see if Sharpe improves" — local.
+- "Re-run with a different regime-component count" — local.
+- "Debug a fold that crashed" — local on the offending fold only.
+- "I changed one hyperparameter and want to re-test" — local.
+
+The cost of cloud isn't the per-run charge — it's the *frequency* of casual re-runs at cloud rates. Spending $3 once on a real final run is sensible; spending $3 × 20 on iterative tweaks is how a credit budget evaporates without anything to show for it. Default cloud + this discipline gives you the speed where it matters and the thrift where it doesn't.
+
+### Rules of the policy (always apply)
+
+- **Cost discipline:** every cloud invocation is justified in writing in `docs/PROGRESS.md` with the reason, expected spend, and actual spend after the run. The credits are finite and **reserved primarily for Phase 8**; research runs are a secondary use.
+- **No persistent training infrastructure.** Spot → run → fetch → terminate. A standing training instance is an anti-pattern at this scale.
+- **Reproducibility first.** Every cloud run is reproducible from a local config + Docker image + versioned data. If a run can't be reproduced locally given enough time, it shouldn't run in cloud either.
+- **Idempotency and resumability.** Cloud jobs must be safe to interrupt and resume — spot instances can be reclaimed with 2 minutes' notice.
+- **No production data on research instances** unless strictly needed; research reads from the immutable raw archive in S3, never from the live engine's state.
+- **Stop, don't terminate, only when you'll resume within 24 hours.** Otherwise terminate. Stopped instances don't bill compute but still bill EBS.
+
+### What an AI agent must NOT do without explicit operator approval
+
+- Launch **on-demand** instances (must be spot unless explicitly approved).
+- Launch instances **outside `ap-south-1`**.
+- Create or attach a **NAT Gateway**.
+- Open a security group inbound to **`0.0.0.0/0`**.
+- Create resources without the mandatory tags.
+- Create **public S3 buckets** or disable Block Public Access.
+- Provision a **standing training instance** of any kind.
+- Use the **root account** for anything.
+- Hard-code credentials anywhere, including in user-data scripts, AMIs, or environment files in git.
+- Touch the **registered static IP** (EIP attached to the live engine) — once registered with the broker, it must not change.
+
+If any of the above is genuinely needed for a subtask, **STOP and surface it to the operator with the rationale, expected cost, and alternatives** — per Ground Rule 9. Do not proceed unilaterally.
+
+This policy is referenced by P2.7, P2.8, and Phase 8; future subtasks proposing cloud use must justify it against the two legitimate uses above and follow the runbooks here.
+
 ---
 
 # PART III — TECHNICAL REFERENCE (distilled from the six deep dives)
@@ -538,12 +661,16 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 - **Done when:** ensemble + regime gate evaluated under CPCV; models versioned in registry; tested.
 - **Reference:** Layer 2 models.
 
+> **Compute note:** the ensemble + regime gate + meta-model stack is the second-heaviest research run. **Final P2.7 runs (whose artifacts feed P2.9 / the kill-gate) execute on cloud by default** — spot `c7i.8xlarge` in `ap-south-1`, ≈2–4 hrs, ≈$2–3. **Iterative development runs** (feature subset tweaks, HMM component-count sweeps, meta-model threshold tuning, anything you expect to re-run within hours) **stay local** — sequential per-model training with float32 features fits in 16 GB. The agent must distinguish the two; cloud is reserved for runs whose artifacts go into the registry. See the "Cloud compute policy" subsection in Part II for the standard runbook and the iteration-discipline rule.
+
 #### P2.8 — Robustness battery + two-engine reconciliation
 - **Goal:** stress the edge.
 - **Depends on:** P2.2, P2.7
 - **Deliverable:** parameter sensitivity, Monte Carlo shuffle, noise injection, cross-symbol, synthetic-data backtest; reconciliation against a second engine (VectorBT vs Backtrader/Nautilus).
 - **Done when:** each test runs and reports; two engines reconcile within tolerance on a sample strategy; tested.
 - **Reference:** Layer 2 robustness.
+
+> **Compute note:** the full CPCV path reconstruction + robustness battery is the heaviest single run in the research phase. Recommended execution: rent a spot `c7i.8xlarge` (32 vCPU) in `ap-south-1` for the one-shot run (≈3–6 hrs, ≈$3–5), fetch artifacts to S3, terminate the instance. Follow the standard runbook in Part II's "Cloud compute policy" subsection. Local execution is acceptable if RAM and time allow; treat 16 GB local RAM as the threshold above which P2.8 should move to cloud.
 
 #### P2.9 — Validation report + kill-gate emitter
 - **Goal:** one report that decides trade/don't-trade.
