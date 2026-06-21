@@ -57,13 +57,19 @@ costs:
   stt_sell_rate: 0.00025          # 0.025%, sell side
   exchange_txn_rate: 0.00003      # ~0.003%, per side
   stamp_duty_buy_rate: 0.00003    # ~0.003%, buy side
-  gst_rate: 0.18                  # 18% on (brokerage + exchange txn charges)
+  gst_rate: 0.18                  # 18% on (brokerage + exchange txn + SEBI charges)
   sebi_charges_rate: 0.000001     # Rs.10 per crore
 
 slippage:
   model: depth_aware
-  min_bps: 5.0                    # 0.05%
-  max_bps: 20.0                   # 0.20%
+  min_bps: 5.0                    # 0.05% floor (tiny order, deep liquidity)
+  max_bps: 20.0                   # 0.20% ceiling (order consumes all available liquidity)
+
+backtest:
+  # Realistic backtester engine (P2.1). Cost/slippage rates are above; these are the
+  # engine knobs (Deep Dive #2 §4b.6).
+  initial_capital_inr: 1000000.0  # starting equity a run marks to market against
+  execution_delay_bars: 1         # next-bar-open: decide at close t, fill at open t+1
 
 risk:
   max_daily_loss_pct: 2.0         # daily loss limit -> flatten + halt for the day

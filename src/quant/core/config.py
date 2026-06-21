@@ -155,6 +155,21 @@ class SlippageConfig(_Section):
         return self
 
 
+class BacktestConfig(_Section):
+    """Realistic-backtester engine parameters (Layer 2 validation, P2.1).
+
+    The cost/slippage *rates* live in :class:`CostConfig` / :class:`SlippageConfig`; this
+    section holds the engine knobs: the starting equity a run marks to market against, and
+    the decision→fill delay in bars. ``execution_delay_bars = 1`` is **next-bar-open** —
+    a decision on bar *t*'s close fills at bar *t+1*'s open, identically in research and
+    live (Inviolable Rule 2). It is config, not a literal, so a longer modelled latency is
+    a setting, never a code change (Ground Rule 2).
+    """
+
+    initial_capital_inr: float = Field(gt=0)
+    execution_delay_bars: int = Field(default=1, ge=1)
+
+
 class RiskConfig(_Section):
     """Hard risk limits (consumed by the un-overridable risk engine, P3.1)."""
 
@@ -306,6 +321,7 @@ class Config(_Section):
     execution: ExecutionConfig
     costs: CostConfig
     slippage: SlippageConfig
+    backtest: BacktestConfig
     risk: RiskConfig
     sizing: SizingConfig
     portfolio: PortfolioConfig

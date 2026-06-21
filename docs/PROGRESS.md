@@ -40,7 +40,7 @@ Updated at the end of every session.
 
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
-| | P2.1 Validation harness core (purged CV + cost backtester) | ☐ todo | | | |
+| 2026-06-21 | P2.1 Validation harness core (purged CV + cost backtester) | ☑ done | `feat/p2.1-validation-harness` | 72 new (553 total) | `research/validation/`: `PurgedKFold` (purge + embargo, strict no-overlap), `IndianCostModel` (itemised per-order brokerage/STT/exchange/SEBI/stamp/GST), `DepthAwareSlippage` (size-vs-liquidity participation curve), `Backtester` (event-driven, next-bar-open, intraday square-off, costs+slippage, latency). 100% cov on new modules. See notes. |
 | | P2.2 CPCV + DSR + PBO | ☐ todo | | | |
 | | P2.3 Labeling: CUSUM + triple-barrier | ☐ todo | | | |
 | | P2.4 Sample weighting | ☐ todo | | | |
@@ -961,3 +961,92 @@ feature set on demand**:
 
 **Next: Phase 2 — Research Layer** (P2.1 — validation harness core: purged CV + cost
 backtester; "build the validation engine before the models").
+
+---
+
+## Phase 2 — Research Layer
+
+### 2026-06-21 — P2.1 Validation harness core (purged CV + cost backtester) ☑
+
+**Goal:** *the judge before any contestant* — a purged k-fold + embargo splitter and a
+realistic, next-bar-open backtester with the full Indian cost model and size/depth-aware
+slippage. (CPCV/DSR/PBO are P2.2; labels are P2.3 — this subtask builds only the
+splitter + backtest core, per the deliverable.)
+
+**Reference (Ground Rule 9):** Deep Dive #2 §4b.1 (purging — "remove from training any
+observation whose label window overlaps the test set's span"; embargo — forward-only
+buffer ≈ label horizon; "without these every number is optimistic fiction"; technique
+from AFML ch. 7), §4b.6 (the realistic backtester: **next-bar-open** fills, the itemised
+Indian MIS cost model with the per-order ₹20 brokerage cap / sell-side STT / buy-side
+stamp / 18% GST on brokerage+exchange+SEBI, size-vs-depth slippage 0.05–0.20%, latency).
+Inviolable Rules 2 (point-in-time; next-bar-open identical in research and live) and 4
+(costs always modelled). Build order (§"What I'd build"): purged-CV + cost model **first**.
+
+**Delivered (`src/quant/research/validation/`):**
+- `splits.py` — `PurgedKFold(n_splits, embargo_pct).split(label_times) → Fold(train, test)`.
+  Contiguous time-blocks as test sets; training purged of any observation whose label
+  window `[t0, t1]` overlaps the block's span, plus a forward embargo. **Strict**
+  non-overlap (drops the boundary instant AFML's `<=` keeps). `embargo_size` exposed +
+  tested. Fails loud on unsorted/naive/duplicate index, non-datetime values, `t1 < t0`,
+  too-few observations.
+- `costs.py` — `IndianCostModel.cost_for_fill(side, price, qty) → CostBreakdown` (itemised:
+  brokerage `min(rate·turnover, cap)`, STT sell-side, exchange per-side, SEBI, stamp
+  buy-side, GST on brokerage+exchange+SEBI). Pure; every rate from `CostConfig`.
+- `slippage.py` — `DepthAwareSlippage`: participation = `qty / available_liquidity`
+  (clamped), slippage interpolates `min_bps → max_bps`; no-liquidity → ceiling
+  (conservative). `adjusted_fill_price` moves a buy up / sell down. The backtest passes the
+  fill bar's **volume** as the liquidity proxy in the bars-only path (true 5-depth
+  substitutes later).
+- `backtest.py` — `Backtester(cost_model, slippage_model, *, initial_capital,
+  execution_delay_bars).run(bars, target_positions) → BacktestResult` (fills, MtM equity
+  curve, per-bar returns, net aggregates). Event-driven loop: a target decided on bar *t*'s
+  close fills at bar *t+delay*'s **open**; no fill bridges a session; **square-off at each
+  session's last-bar open** (no overnight MIS carry; lines up with self-square-off ~15:15).
+  `create_backtester(config)` wires the real models. Handles long/short uniformly.
+- `core/config.py` + `config/default.yaml` — new `BacktestConfig` (`initial_capital_inr`,
+  `execution_delay_bars` = next-bar-open default), config not literals (Ground Rule 2).
+  Corrected the `costs.gst_rate` comment to include SEBI charges (matches §4b.6 and the code).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (144 files), pre-commit
+(12 hooks); **553 tests pass (72 new)**; **100% coverage** on all five new
+`research/validation` modules. Hand-computed cases throughout: cost breakdowns vs the NSE
+schedule (cap on both sides of the `min`), slippage participation curve, P&L =
+`qty·(exit_open − entry_open)` for long & short, costs/slippage reducing net P&L by exactly
+the modelled amount, latency shifting the fill bar, and the **purge no-overlap invariant**
+asserted directly on overlapping label windows.
+
+**Decisions**
+- **P2.1 is the splitter + backtest core only.** CPCV path-reconstruction, DSR, PBO
+  (§4b.2–4) are P2.2 and consume this backtester's `returns`; the empty
+  `research/validation/__init__` docstring already scoped them there. Walk-forward (§4b.5)
+  also builds on these primitives in P2.2. Kept this subtask to its deliverable.
+- **Strict purge over AFML's `<=` boundary.** A label resolving at the exact instant the
+  test block begins/ends is dropped, not kept — a hair more conservative, zero leakage.
+  The reusable per-block keep-logic is the primitive CPCV will reuse for arbitrary test
+  groups (P2.2).
+- **Square-off at the last bar's *open*, uniformly.** Every fill — entries and the forced
+  end-of-session flatten — happens at a bar open, so there is one execution rule and no
+  open/close asymmetry. Flattening at the final 15-min bar's open ≈ 15:15 = the configured
+  self-square-off. No position is ever carried overnight (asserted).
+- **Bar volume as the liquidity proxy.** Bars carry no order book, so the size/depth-aware
+  slippage uses the fill bar's volume as available liquidity — data we have, conservative
+  for large orders, and swappable for true 5-depth on the live/feature path.
+- **Within-layer concrete models, injected (DI).** Cost/slippage are concrete classes
+  injected into the backtester (tests pass zero/flat-config instances to isolate
+  mechanics); a Protocol is deferred until a second slippage model (volatility/time-of-day
+  widening) actually appears (YAGNI; Ground Rule 1 reserves interfaces for real swaps).
+
+**Follow-ups / notes (deferred, tracked)**
+- **CPCV + DSR + PBO + walk-forward → P2.2** reconstruct paths over `PurgedKFold`'s blocks
+  and compute path-Sharpe from `BacktestResult.returns`.
+- **Triple-barrier labels → P2.3** produce the `label_times` (`t0 → t1`) the splitter
+  consumes and the `target_positions` the backtester executes; today's tests synthesise both.
+- **Volatility/time-of-day slippage widening** (§4b.6 "wider near the open / in volatile
+  windows") multiplies the participation base once the vol input is wired — `slippage_bps`
+  is shaped to extend.
+- **Multi-asset / portfolio backtests** compose per-symbol single-symbol runs; the core is
+  single-symbol by design (fails loud on multi-symbol bars).
+- ⚠️ Cost rates are the documented defaults — *"pull exact numbers from a current brokerage
+  calculator; these change"* (§4b.6). They live in `config.costs` for exactly that reason.
+
+**Next subtask: P2.2 — CPCV + DSR + PBO.**
