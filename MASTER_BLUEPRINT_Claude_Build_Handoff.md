@@ -251,6 +251,92 @@ This policy is referenced by the dependency choices in **P1.3** (Parquet + Redis
 base engine deps; ArcticDB operator-installed in research) and should guide every future
 "should I add this dep?" decision.
 
+## Research environment setup (operator runbook)
+
+The Environment Policy says optional backends (ArcticDB, MLflow) live in a separate research env, never in the engine env. This is the standard, cross-platform runbook for standing that env up. The recipe assumes `uv` as the toolchain and is correct on Windows, Linux, and macOS.
+
+### Standing it up (one time, ~15 minutes)
+
+```bash
+# from the repo root — works the same on Windows / Linux / macOS
+
+# 1) create the research venv (separate from the engine env)
+uv venv .venv-research --python 3.12
+
+# 2) activate it (the activation command is the only platform-specific line)
+#    Windows (PowerShell): .venv-research\Scripts\Activate.ps1
+#    Windows (cmd.exe):    .venv-research\Scripts\activate.bat
+#    Linux / macOS:        source .venv-research/bin/activate
+
+# 3) install research-only packages into the now-active env
+uv pip install "pandas<3"
+uv pip install mlflow arcticdb
+# (add other research-only packages here as future subtasks introduce them)
+
+# 4) verify
+mlflow --version
+python -c "import mlflow, arcticdb, pandas; print(pandas.__version__)"
+# expected: pandas reports a 2.x version inside this env (the engine env stays 3.x)
+
+# 5) deactivate when finished (`deactivate` on all platforms)
+```
+
+Before exiting this subsection, also ensure the repo's `.gitignore` covers `.venv-research/` and `mlruns/`. If it does not, that's a one-line fix tracked as part of the first subtask that needs persistent tracking — not part of this docs PR.
+
+### Running MLflow tracking for a research run
+
+```bash
+# Terminal A — start a local MLflow server bound to localhost only
+#   Windows: .venv-research\Scripts\mlflow.exe ui --host 127.0.0.1 --port 5000 --backend-store-uri ./mlruns
+#   Linux / macOS: .venv-research/bin/mlflow ui --host 127.0.0.1 --port 5000 --backend-store-uri ./mlruns
+
+# Terminal B — activate the research env, then run training with the URI set
+#   (activate per the platform line above)
+#   then:
+export MLFLOW_TRACKING_URI=http://127.0.0.1:5000     # Linux / macOS
+$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"    # Windows PowerShell
+set MLFLOW_TRACKING_URI=http://127.0.0.1:5000         # Windows cmd.exe
+
+python -m quant.research.<your_entry_point>
+```
+
+The training code path does not change. `MLflowExperimentTracker` (built in P2.6) lazy-loads when `mlflow` is importable; the in-memory tracker is used otherwise. Setting `MLFLOW_TRACKING_URI` is what activates persistence. `--host 127.0.0.1` keeps the MLflow UI bound to localhost — do not expose the MLflow server to a public interface.
+
+### When the research env is REQUIRED (auto-trigger)
+
+Stand up the research env (if not already standing) before starting any subtask that meets either condition:
+
+1. The subtask produces artifacts that will be promoted to the model registry, fed into the kill-gate report (P2.9), used in champion/challenger promotion, or otherwise persisted across sessions.
+2. The subtask runs hyperparameter tuning, multi-configuration comparison, or any process whose honest trial count must survive across sessions for the Deflated Sharpe computation in P2.9.
+
+By the current blueprint, this trigger fires for at least: P2.7 (ensemble + regime gate + registry), P2.8 (CPCV + robustness battery), P2.9 (validation report + kill-gate emitter), P5.6 (scheduled + drift-triggered retraining, champion/challenger), and any subsequent model-promotion or retrain run.
+
+Mandatory start-of-subtask procedure for any subtask the trigger fires for (this is acceptance-criterion-grade, not advisory):
+
+1. Verify the research env exists and is healthy (`mlflow --version` inside it). If it does not exist, stand it up using the recipe above before any other work on the subtask — do not fall back to the in-memory tracker.
+2. Start a local MLflow server (or confirm one is running), bound to `127.0.0.1`, with a persistent backend store at `./mlruns`.
+3. Ensure `MLFLOW_TRACKING_URI` is set in the training process's environment.
+4. Log every configuration tried as a separate MLflow run (the trial-count rule — this is what makes P2.9's Deflated Sharpe honest).
+5. Record in `docs/PROGRESS.md` that persistent MLflow tracking is in use for this subtask, including the MLflow run-IDs or experiment-ID(s) produced. Failing to record this is a missed acceptance criterion for the subtask.
+
+Falling back to the in-memory tracker silently for an auto-trigger subtask is a silent correctness violation of P2.9's Deflated Sharpe contract — treat it the same way the codebase treats a CI lint failure: do not merge.
+
+### Tooling integration
+
+- The repo's `mypy`/`ruff` configuration must exclude `.venv-research/` so static analysis does not traverse research dependencies. If not already excluded, fixing the exclusion is part of the first subtask that creates the research env, not part of this docs PR.
+- The CI confinement test introduced in P2.6 (which fails the build if `mlflow` or `lightgbm` leak outside `src/quant/research/models/`) remains in force regardless — the research env exists to let the operator use these packages, not to let them leak into the engine.
+
+### Rules (always apply)
+
+- Engine env never installs `mlflow`, `arcticdb`, or anything else that would force pandas < 3. The CI confinement test enforces this.
+- Research env is for research scripts and notebooks only. It must never be imported by the engine.
+- `.venv-research/` and `mlruns/` are gitignored. Run history is local artifact, not source.
+- Persistence is not optional for runs that meet the auto-trigger conditions above — it is a correctness requirement (honest trial count → honest DSR in P2.9).
+- Bind MLflow UI to `127.0.0.1` only. Never expose it on a public interface.
+- When MLflow eventually relaxes the pandas pin, this whole subsection becomes optional and `mlflow` may move to the engine env. Until then, this is the standard.
+
+This runbook is referenced by every subtask in the auto-trigger list and supersedes any subtask-local instruction about how/when to set up persistent experiment tracking.
+
 ## Cloud compute policy (AWS)
 
 **Default: local.** Training, research, and validation run on the operator's machine. The cloud is rented only when a specific, justified need exists — never as the default for compute.
@@ -663,6 +749,8 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 
 > **Compute note:** the ensemble + regime gate + meta-model stack is the second-heaviest research run. **Final P2.7 runs (whose artifacts feed P2.9 / the kill-gate) execute on cloud by default** — spot `c7i.8xlarge` in `ap-south-1`, ≈2–4 hrs, ≈$2–3. **Iterative development runs** (feature subset tweaks, HMM component-count sweeps, meta-model threshold tuning, anything you expect to re-run within hours) **stay local** — sequential per-model training with float32 features fits in 16 GB. The agent must distinguish the two; cloud is reserved for runs whose artifacts go into the registry. See the "Cloud compute policy" subsection in Part II for the standard runbook and the iteration-discipline rule.
 
+> **Tracking note:** this subtask meets the auto-trigger in Part II's "Research environment setup (operator runbook)" — persistent MLflow tracking is required, not optional. Stand up the research env per the runbook before starting work, and record persistent-tracking confirmation (run-IDs/experiment-IDs) in `docs/PROGRESS.md` for this subtask. Falling back to the in-memory tracker is a missed acceptance criterion.
+
 #### P2.8 — Robustness battery + two-engine reconciliation
 - **Goal:** stress the edge.
 - **Depends on:** P2.2, P2.7
@@ -672,12 +760,16 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 
 > **Compute note:** the full CPCV path reconstruction + robustness battery is the heaviest single run in the research phase. Recommended execution: rent a spot `c7i.8xlarge` (32 vCPU) in `ap-south-1` for the one-shot run (≈3–6 hrs, ≈$3–5), fetch artifacts to S3, terminate the instance. Follow the standard runbook in Part II's "Cloud compute policy" subsection. Local execution is acceptable if RAM and time allow; treat 16 GB local RAM as the threshold above which P2.8 should move to cloud.
 
+> **Tracking note:** this subtask meets the auto-trigger in Part II's "Research environment setup (operator runbook)" — persistent MLflow tracking is required, not optional. Stand up the research env per the runbook before starting work, and record persistent-tracking confirmation (run-IDs/experiment-IDs) in `docs/PROGRESS.md` for this subtask. Falling back to the in-memory tracker is a missed acceptance criterion.
+
 #### P2.9 — Validation report + kill-gate emitter
 - **Goal:** one report that decides trade/don't-trade.
 - **Depends on:** P2.2, P2.8
 - **Deliverable:** `research/reports/` — automated report (CPCV distribution, DSR, PBO, trial count, walk-forward equity, robustness) + QuantStats tearsheet + the **seven-point kill-gate** as pass/fail.
 - **Done when:** report generates end-to-end and emits the kill-gate verdict; tested.
 - **Reference:** Layer 2 kill-gate.
+
+> **Tracking note:** this subtask meets the auto-trigger in Part II's "Research environment setup (operator runbook)" — persistent MLflow tracking is required, not optional. Stand up the research env per the runbook before starting work, and record persistent-tracking confirmation (run-IDs/experiment-IDs) in `docs/PROGRESS.md` for this subtask. Falling back to the in-memory tracker is a missed acceptance criterion.
 
 **GATE 2 — THE KILL-GATE:** no strategy proceeds toward capital without passing all seven criteria on honest, cost-inclusive, point-in-time data. Most ideas die here. Tag `gate-2-research`.
 
@@ -829,6 +921,8 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 - **Deliverable:** `ops/mlops/` — scheduled + drift-triggered walk-forward retrain; champion/challenger shadow harness; **kill-gate re-run on every candidate**; registry + instant rollback.
 - **Done when:** a challenger trains, shadows, and is promoted only after passing the kill-gate; rollback works; tested.
 - **Reference:** Layer 5 MLOps.
+
+> **Tracking note:** this subtask meets the auto-trigger in Part II's "Research environment setup (operator runbook)" — persistent MLflow tracking is required, not optional. Stand up the research env per the runbook before starting work, and record persistent-tracking confirmation (run-IDs/experiment-IDs) in `docs/PROGRESS.md` for this subtask. Falling back to the in-memory tracker is a missed acceptance criterion.
 
 #### P5.7 — Platform: audit, alerting, secrets, config
 - **Goal:** production plumbing.
