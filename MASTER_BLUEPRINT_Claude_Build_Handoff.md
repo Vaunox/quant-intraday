@@ -979,7 +979,7 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 | 2026-06-21 | P2.6 | ☑ done | `feat/p2.6-model-baseline` | 786 passing (58 new) | `research/models/`: LightGBM baseline (native API) evaluated **only under purged CV** (pooled OOS preds), permutation/MDA importance (not MDI), **isotonic calibration** (hand-rolled PAVA), purged-CV hyperparameter tuning, and experiment tracking (`ExperimentTracker` → in-memory default + lazy, confined **MLflow** adapter — operator-installed like arcticdb, since mlflow pins pandas<3). `LightGBMBaseline` implements the live `Model`. Added `lightgbm`; mlflow not a declared dep. 100% cov on new modules. Details in `docs/PROGRESS.md`. |
 | | … | | | | |
 
-**Gate status:** Gate 0 ☑ · Gate 1 ☐ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
+**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
 
 ---
 
