@@ -125,36 +125,83 @@ class PurgedKFold:
         positions = np.arange(n)
 
         for block in np.array_split(positions, self._n_splits):
-            test_start = int(block[0])
-            test_end = int(block[-1])  # inclusive
-            test = positions[test_start : test_end + 1]
-
-            t0_test = starts[test_start]  # the test block's first event time
-            t1_test_max = ends[test_start : test_end + 1].max()  # last label resolution in block
-
-            # Train-before: the label resolved strictly before the test block begins, so
-            # its window cannot reach into the block.
-            before = ends < t0_test
-            # Train-after: the event begins strictly after the block's last label resolves
-            # (no overlap), then skip a further `embargo` observations (forward buffer).
-            # searchsorted(side="right") gives the first position whose t0 > t1_test_max.
-            resume = int(np.searchsorted(starts, t1_test_max, side="right")) + embargo
-            after = positions >= resume
-
-            keep = before | after
-            keep[test_start : test_end + 1] = False  # never train on a test observation
-            train = positions[keep]
-
+            test_mask = np.zeros(n, dtype=bool)
+            test_mask[int(block[0]) : int(block[-1]) + 1] = True  # one contiguous test block
+            test = positions[test_mask]
+            train = positions[purged_train_mask(starts, ends, test_mask, embargo)]
             _logger.debug(
                 "purged fold",
                 extra={
-                    "test_start": test_start,
+                    "test_start": int(block[0]),
                     "test_size": int(test.shape[0]),
                     "train_size": int(train.shape[0]),
                     "embargo": embargo,
                 },
             )
             yield Fold(train=train, test=test)
+
+
+def purged_train_mask(
+    starts: npt.NDArray[np.datetime64],
+    ends: npt.NDArray[np.datetime64],
+    test_mask: npt.NDArray[np.bool_],
+    embargo: int,
+) -> npt.NDArray[np.bool_]:
+    """Return the train mask after purging label overlap and a forward embargo.
+
+    The reusable purge primitive shared by :class:`PurgedKFold` (one contiguous test
+    block) and CPCV (a test set spanning several, possibly non-adjacent, groups). For
+    **each** contiguous run of test positions it keeps a candidate observation only when
+    its label window does not reach into that run's span ``[t0, t1_max]``:
+
+    * **before** — the label resolved strictly before the run begins (``end < t0``), or
+    * **after** — the event begins strictly after the run's last label resolves, then a
+      further ``embargo`` observations are skipped (the forward-only serial-correlation
+      buffer).
+
+    Composing the runs with logical AND means an observation survives only if it clears
+    *every* test run (so a point between two test blocks is purged by whichever block its
+    window reaches). Test observations themselves are never training data.
+
+    Args:
+        starts: Event times ``t0`` per observation (sorted ``datetime64``, UTC basis).
+        ends: Label-resolution times ``t1`` per observation (``datetime64``, same basis).
+        test_mask: Boolean mask of the test observations.
+        embargo: Number of observations to embargo after each contiguous test run.
+
+    Returns:
+        A boolean mask of the surviving training observations.
+    """
+    n = starts.shape[0]
+    positions = np.arange(n)
+    keep = np.ones(n, dtype=bool)
+    for run_start, run_end in _contiguous_runs(test_mask):
+        t0_test = starts[run_start]  # the run's first event time
+        t1_test_max = ends[run_start : run_end + 1].max()  # last label resolution in the run
+        before = ends < t0_test
+        # searchsorted(side="right") = first position whose t0 > t1_test_max (no overlap).
+        resume = int(np.searchsorted(starts, t1_test_max, side="right")) + embargo
+        after = positions >= resume
+        keep &= before | after
+    keep[test_mask] = False  # never train on a test observation
+    return keep
+
+
+def _contiguous_runs(mask: npt.NDArray[np.bool_]) -> list[tuple[int, int]]:
+    """Return the inclusive ``(start, end)`` position spans of each ``True`` run in ``mask``."""
+    runs: list[tuple[int, int]] = []
+    n = mask.shape[0]
+    i = 0
+    while i < n:
+        if not mask[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and mask[j + 1]:
+            j += 1
+        runs.append((i, j))
+        i = j + 1
+    return runs
 
 
 def _validate_label_times(
