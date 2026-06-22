@@ -22,6 +22,7 @@ dependencies = [
     "ta-lib>=0.6.8",       # technical indicators, never hand-rolled; prebuilt wheels incl. manylinux (P1.7)
     "statsmodels>=0.14",   # ADF stationarity test for min-d fractional differentiation (P2.5); resolves with pandas 3.x
     "lightgbm>=4.4",       # gradient-boosted baseline classifier (native API), confined to research/models/ (P2.6); no pandas pin
+    "xgboost>=2.0",        # second gradient-boosting family for the cross-family ensemble (native API), confined to research/models/ (P2.7); no pandas pin
 ]
 
 # Optional storage backends, confined to data/store/ and imported lazily (P1.3).
@@ -143,12 +144,12 @@ ignore_missing_imports = true
 module = ["statsmodels.*"]
 ignore_missing_imports = true
 
-# LightGBM (P2.6 baseline) ships no py.typed marker; its native-API use is confined to
-# research/models/baseline.py behind our own typed wrappers. MLflow is an optional,
-# operator-installed experiment-tracking backend (it pins pandas<3, like arcticdb), so it
-# is absent in CI and its lazy use is confined to research/models/tracking.py.
+# LightGBM (P2.6 baseline) and XGBoost (P2.7 ensemble) ship no py.typed marker; their
+# native-API use is confined to research/models/ behind our own typed wrappers. MLflow is an
+# optional, operator-installed experiment-tracking backend (it pins pandas<3, like arcticdb),
+# so it is absent in CI and its lazy use is confined to research/models/tracking.py.
 [[tool.mypy.overrides]]
-module = ["lightgbm.*", "mlflow.*"]
+module = ["lightgbm.*", "xgboost.*", "mlflow.*"]
 ignore_missing_imports = true
 
 # --------------------------------------------------------------------------- #

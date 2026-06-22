@@ -1,9 +1,9 @@
-"""Structural guarantee: LightGBM and MLflow are imported only within research/models/.
+"""Structural guarantee: LightGBM, XGBoost, and MLflow are imported only within research/models/.
 
 Ground Rule 1 (the same confinement discipline as the broker SDK in P1.1 and the optional
-storage clients in P1.3): the gradient-boosting library and the optional experiment-tracking
+storage clients in P1.3): the gradient-boosting libraries and the optional experiment-tracking
 backend stay behind the model package's own interfaces, so the rest of the system depends on
-neither. AST-based (inspects ``import`` statements only), enforced in CI.
+none of them. AST-based (inspects ``import`` statements only), enforced in CI.
 """
 
 import ast
@@ -11,10 +11,10 @@ from pathlib import Path
 
 import quant
 
-#: The only package allowed to import LightGBM / MLflow.
+#: The only package allowed to import LightGBM / XGBoost / MLflow.
 _ALLOWED_PACKAGE = ("research", "models")
 #: Top-level modules whose import must stay confined.
-_GUARDED_MODULES = frozenset({"lightgbm", "mlflow"})
+_GUARDED_MODULES = frozenset({"lightgbm", "xgboost", "mlflow"})
 
 
 def _imported_top_level_modules(tree: ast.Module) -> set[str]:
