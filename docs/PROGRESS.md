@@ -1432,3 +1432,104 @@ deterministic per seed. The MLflow adapter is exercised against a faithful fake 
   is optional, like arcticdb); the in-memory tracker needs no install.
 
 **Next subtask: P2.7 — Ensemble + regime gate + registry.**
+
+### 2026-06-22 — P2.7 Ensemble + regime gate + registry ☑
+
+**Goal:** the **production model stack** — a calibrated LightGBM + XGBoost + linear ensemble
+(rank-averaging / stacking), an HMM/GMM regime gate, and a versioned model registry — built on
+the P2.6 baseline and evaluated under the P2.2 CPCV path distribution.
+
+**Reference (Ground Rule 9):** Deep Dive #2 §4.1 Step 2 (LightGBM **+ XGBoost** as the core),
+Step 3 (cross-family blend via **rank-averaging or stacking** — *"diversity across model
+families is more robust than one big tuned model; diversity is a free lunch"*), Step 4 (an
+**HMM/GMM** regime gate that switches models on/off or sizes them down by volatility/trend
+regime — non-stationarity), §4 output contract (*"every artifact tagged with the data +
+feature + label versions it was trained on"* → the registry). §4b.2 for the CPCV path-Sharpe
+distribution the gate is judged on. Inviolable Rule 2 (point-in-time: combiner/calibrator fit
+OOF; regime model fit on train, applied to test; gate selection from train returns only).
+
+**Delivered (`src/quant/research/models/`):**
+- `estimators.py` — one tiny `Estimator` (`fit → FittedEstimator`) / `FittedEstimator`
+  (`predict_proba`) contract so the ensemble blends *prediction vectors*, not library
+  internals. `LightGBMEstimator` (reuses the P2.6 `fit_booster`), `XGBoostEstimator` (second
+  GBM family, native API, confined), `LogisticEstimator` (hand-rolled L2 logistic, standardized,
+  zero-init full-batch GD → deterministic without an RNG). `xgb_params_from_config` maps the
+  shared `ModelConfig` capacity/regularization knobs onto XGBoost's names (one config, both
+  boosters). All three deterministic for a fixed seed (single-thread boosters; convex logistic).
+- `ensemble.py` — `RankAverageCombiner` (mean of each member's empirical-quantile rank against
+  its own OOF reference — scale/calibration-neutral, and well-defined for one live row) and
+  `StackCombiner` (a logistic meta-learner over the members' **OOF** probabilities). Both feed
+  isotonic calibration. `EnsembleTrainer.train` pools per-member OOF predictions under
+  `PurgedKFold`, fits the combiner + calibrator on those leak-free OOF preds, then re-fits the
+  members on all data; `EnsembleModel` implements the live `Model` contract. `build_ensemble`
+  is the per-split helper for CPCV.
+- `regime.py` — `GaussianMixtureModel` (diagonal-covariance EM, log-sum-exp E-step, seeded
+  init → deterministic; components sorted by first-feature mean so labels are stable and
+  interpretable) + `RegimeGate` (per-regime position multiplier: 0 = off, fraction = sized
+  down, 1 = full). `select_regime_multipliers` switches off regimes whose train return is
+  non-positive (the operational form of kill-gate criterion 7, "edge stable across regimes").
+- `registry.py` — `ModelCard` (the four version tags + metrics/params/importances + assigned
+  `model_id`/`version`/`created_at`/SHA-256 `fingerprint`), `ModelRegistry` Protocol +
+  `InMemoryModelRegistry` (default) + `FileModelRegistry` (JSON card + pickled artifact under a
+  `pathlib` directory tree, append-only versioning, fingerprint integrity check on load,
+  durable across sessions for Layer-5 rollback). Imports no model library — storage stays
+  decoupled from the GBMs.
+- `evaluation.py` — `evaluate_ensemble_under_cpcv`: per CPCV split, fit the ensemble + a
+  train-return-driven regime gate on the purged train rows, predict on the held-out test rows,
+  turn calibrated `P(y=1)` into a position (`2·p - 1`), gate it, multiply by the realized
+  forward return → the per-observation OOS strategy return CPCV stitches into φ path-Sharpes.
+- `pyproject.toml` — added **`xgboost>=2.0`** (no pandas pin, like lightgbm); mypy override for
+  untyped `xgboost`; `test_models_confinement.py` now also guards `xgboost` (AST scan fails CI
+  on any `lightgbm`/`xgboost`/`mlflow` import outside `research/models/`).
+
+**Verification (all green, Py 3.12):** ruff, black, mypy strict (193 files); `uv lock` clean
+(pandas stays 3.x — xgboost 3.3.0 resolved with no pin); **884 tests pass (98 new)**; **100%
+coverage** on all five new modules. Headline asserts on synthetic *known-signal* data: each
+family learns the signal (AUC > 0.8) and is column-order-invariant + deterministic; the
+ensemble's combined OOS AUC > 0.8 with every member attributable; the fitted ensemble satisfies
+the live `Model` contract; the GMM recovers two well-separated regimes (>99% accuracy) with
+stable labels; **the regime gate recovers an edge that cancels out ungated** — in a scenario
+where the signal is profitable in one regime and loss-making in another, ungated CPCV median
+path-Sharpe ≈ 0 while gated ≈ 0.47 (and a clean-edge dataset gives median path-Sharpe > 0.5,
+the kill-gate-relevant magnitude); the registry round-trips through disk and detects a tampered
+artifact via the fingerprint.
+
+**Decisions**
+- **XGBoost is a real declared dependency (like LightGBM), not hand-rolled or operator-only.**
+  A *different* GBM implementation is the whole point of family diversity (§4.1 Step 2); it
+  does **not** pin `pandas<3` (`uv lock` keeps pandas 3.x), so unlike mlflow/arcticdb it
+  belongs in the engine env, confined to `research/models/`. The linear member, by contrast,
+  *is* hand-rolled (a small convex algorithm, the isotonic/NormalDist precedent) so the stack
+  adds no scikit-learn.
+- **GMM over HMM** for the regime gate (the deep dive allows either). For an unordered
+  point-in-time regime label a mixture is sufficient and is hand-rollable as a clean EM — no
+  `hmmlearn`/sklearn dependency, fully deterministic and testable. An HMM (temporal transition
+  matrix) is a tracked future refinement, not half-built here (Ground Rule 4).
+- **Rank-averaging uses a stored per-member reference distribution, not in-batch ranks.** That
+  makes the blend point-in-time — a single live row ranks against history, not against its
+  unknowable contemporaries — while preserving the spirit (neutralize cross-family scale).
+- **Combiner + calibrator fit on OOF; final members re-fit on all data** — the exact P2.6
+  baseline discipline (a stack trained on OOF base preds cannot leak). `build_ensemble` fits
+  in-sample for the per-split CPCV path because the test block is still strictly purged.
+- **Registry stores via pickle behind a generic `object` artifact** — no GBM import in
+  `registry.py`, so storage and modelling stay decoupled and the registry is testable with a
+  trivial fake model. The fingerprint is integrity, the version tags are the §4 contract.
+
+**Follow-ups / notes (deferred, tracked)**
+- ⚠️ **Persistent MLflow tracking + final cloud run — OPERATOR ACTION (P2.7 tracking note).**
+  This session delivers and unit-tests the *code*, which fully supports persistent tracking via
+  the existing `ExperimentTracker` seam (`EnsembleTrainer.train(tracker=...)` +
+  `create_mlflow_tracker`) — tests use the in-memory tracker, the codebase convention. The
+  **final** P2.7 run — training the stack on the real backfilled, labeled dataset to produce the
+  registry artifacts that feed P2.9's kill-gate — is the operator's to execute under Part II's
+  research-env + MLflow runbook and cloud policy (final runs are operator-driven; Claude must
+  not hold broker credentials or fabricate run-IDs). Record the MLflow experiment/run-IDs here
+  when that run is performed. The code path is ready; only the tracked execution on real data
+  remains, and it must not silently fall back to the in-memory tracker.
+- **Meta-model (§4.1 Step 5) → its natural home is the existing P2.5 `MetaLabeler` + this
+  ensemble as the primary**; wiring the bet/no-bet meta-model on top of the gated ensemble lands
+  with the kill-gate report assembly (P2.9), alongside the DSR honest trial count.
+- **Robustness battery + two-engine reconciliation → P2.8** stresses this stack; the kill-gate
+  verdict (all seven criteria) is emitted in P2.9.
+
+**Next subtask: P2.8 — Robustness battery + two-engine reconciliation.**
