@@ -1583,5 +1583,9 @@ here with the date (no credential values).
   separate add-on needed).
 - **Operator credential handling stays local:** session/persistent env vars on the dev box now;
   AWS Secrets Manager on the live host (Phase 8 / P5A).
+- **Deferred follow-up:** the engine-startup last-4-chars `api_key` log line is deferred to the
+  subtask that introduces engine-startup wiring (likely the Phase-3/4 boundary) — no speculative
+  plumbing now (Ground Rule 4). Compensating control: the P2A.1 verifier already logs the
+  last-4-chars on credential load.
 
 **Next subtask: P2A.2 — Daily-auth flow (the manual TOTP seed).**
