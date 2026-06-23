@@ -34,6 +34,7 @@ from quant.data.brokers.ticker import (
     RawTicker,
     create_kite_ticker_transport,
 )
+from quant.data.brokers.verify import VerificationResult, verify_credentials
 
 __all__ = [
     "KITE_API_KEY_SECRET",
@@ -53,7 +54,9 @@ __all__ = [
     "TokenBucketRateLimiter",
     "TokenStore",
     "UnsupportedIntervalError",
+    "VerificationResult",
     "create_kite_client",
     "create_kite_ticker_transport",
     "normalize_interval",
+    "verify_credentials",
 ]

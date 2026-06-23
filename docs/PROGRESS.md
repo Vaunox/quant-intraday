@@ -1543,3 +1543,45 @@ blueprint: the Kite `api_key` is recorded via the **secrets interface**
 merged P1.1 implementation (`backfill_cli.py` reads `api_key` via `secrets.get(...)`) per Ground
 Rule 4 (don't refactor working, tested code to chase a less-correct doc choice). Docs-only; no
 code changed; P2A.1 itself not yet started.
+
+### 2026-06-23 — P2A.1 Kite Connect: subscription + developer app creation ☑
+
+**Goal:** an active Kite Connect subscription + registered developer app yielding `api_key` /
+`api_secret`, recorded via the secrets interface and confirmed with a read-only call. First
+operator-action subtask (Phase 2A); the AI authored the walkthrough, guided execution, and
+verified — it never held the credentials.
+
+**Operator actions (completed):** created the Kite Connect app on `developers.kite.trade`,
+subscribed (**₹500/month, historical data included** — confirmed on the official site/signup;
+Zerodha repriced down from the ₹2000 the blueprint assumed), and recorded `api_key` /
+`api_secret` via the secrets interface — both as **persistent** env vars (`setx
+QUANT_SECRET_KITE_API_KEY` / `QUANT_SECRET_KITE_API_SECRET`), neither in any config file or git.
+
+**Delivered (AI):**
+- `docs/operator_runbooks/P2A.1_kite_signup.md` — the screen-by-screen walkthrough (console
+  fields, local-dev redirect URL, secrets-interface storage, once-only-secret recovery,
+  verification, last-4-char key fingerprint).
+- `src/quant/data/brokers/verify.py` (logic) + `scripts/verify_kite_credentials.py` (thin shim,
+  Ground Rule 3): reads both credentials via the secrets interface (presence-checked, never
+  printed), builds the Kite client, makes **one read-only** `instruments` call, and logs only
+  the api_key's **last 4 chars** + the instrument count.
+- `tests/unit/test_brokers_verify.py` — 5 tests (fake client; no SDK/network); 100% on `verify.py`.
+
+**Verification (operator machine):** `uv run python scripts/verify_kite_credentials.py` →
+`PASSED — api_key ending <last 4>, fetched 9,853 NSE instruments` (HTTP 200 from
+`api.kite.trade`). The `api_secret` is end-to-end validated later by P2A.2's session checksum.
+
+**Done-when:** ☑ `api_key` via `QUANT_SECRET_KITE_API_KEY`; ☑ `api_secret` via
+`QUANT_SECRET_KITE_API_SECRET` (neither committed); ☑ one read-only call succeeds; ☑ recorded
+here with the date (no credential values).
+
+**Decisions / notes**
+- **Price correction:** the blueprint's ₹2000/month was stale; the real, verified figure is
+  **₹500/month incl. historical data**. Corrected in the blueprint (P2A.1) and the walkthrough.
+- **api_key location:** secrets interface (not config) — see the prior correction note and PR #30.
+- **Historical data** is included in the ₹500 plan, so **P2A.3's backfill is unblocked** (no
+  separate add-on needed).
+- **Operator credential handling stays local:** session/persistent env vars on the dev box now;
+  AWS Secrets Manager on the live host (Phase 8 / P5A).
+
+**Next subtask: P2A.2 — Daily-auth flow (the manual TOTP seed).**
