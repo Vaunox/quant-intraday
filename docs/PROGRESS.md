@@ -1533,3 +1533,13 @@ artifact via the fingerprint.
   verdict (all seven criteria) is emitted in P2.9.
 
 **Next subtask: P2.8 — Robustness battery + two-engine reconciliation.**
+
+### 2026-06-23 — Blueprint correction: P2A.1 `api_key` location
+
+Corrected the P2A.1 "Done when" (and the AI-guidance-deliverable wording + Part V row) in the
+blueprint: the Kite `api_key` is recorded via the **secrets interface**
+(`QUANT_SECRET_KITE_API_KEY`), the same as `api_secret` (`QUANT_SECRET_KITE_API_SECRET`) —
+**not** in `config/env/dev.yaml` as the drifted text had said. This matches the canonical,
+merged P1.1 implementation (`backfill_cli.py` reads `api_key` via `secrets.get(...)`) per Ground
+Rule 4 (don't refactor working, tested code to chase a less-correct doc choice). Docs-only; no
+code changed; P2A.1 itself not yet started.
