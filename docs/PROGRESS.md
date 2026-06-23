@@ -1588,4 +1588,43 @@ here with the date (no credential values).
   plumbing now (Ground Rule 4). Compensating control: the P2A.1 verifier already logs the
   last-4-chars on credential load.
 
-**Next subtask: P2A.2 — Daily-auth flow (the manual TOTP seed).**
+### 2026-06-23 — P2A.2 Daily-auth flow: the manual TOTP seed ☑
+
+**Goal:** a repeatable morning routine turning one manual login into a fresh `access_token`,
+persisted to the secrets interface for the engine/research to read. Second operator-action
+subtask; the AI authored the runbook + helper and verified, never holding the token.
+
+**Operator action (completed, live):** ran `uv run python scripts/kite_morning_auth.py`, logged
+in to Kite (client ID + password + TOTP), pasted the one-time `request_token` from the redirect;
+the exchange returned `POST /session/token → 200` (the `SHA-256(api_key + request_token +
+api_secret)` checksum succeeded — **the `api_secret` is now end-to-end proven**, complementing
+P2A.1's key check). The fresh token persisted to the file-backed secret store; a separate process
+read it back via `default_secrets()` (32 chars). No TOTP automation (compliant).
+
+**Delivered:**
+- `core/secrets.py` — file-backed fallback (`FileSecretStore` at `~/.quant-intraday/secrets.json`,
+  `0600` on POSIX, atomic write) behind the existing `Secrets` interface: **env-then-file**
+  precedence (env always wins → prod/AWS Secrets Manager/CI keep injecting via env), a new
+  `set()` method, and a `default_secrets()` factory. Repository pattern — the Phase-5.2 / Phase-8
+  swap to AWS Secrets Manager is a backend change, not a caller change. Cross-platform (no
+  Windows-only `setx` branch, Ground Rule 2). 100% cov.
+- `data/brokers/morning_auth.py` (logic) + `scripts/kite_morning_auth.py` (thin shim): reuse
+  `KiteAuthenticator.seed_session`, persist via `secrets.set(KITE_ACCESS_TOKEN_SECRET, …)`, log
+  only the access_token's **last 4 chars**. `KITE_ACCESS_TOKEN_SECRET` added to `auth.py`.
+- `docs/operator_runbooks/P2A.2_daily_auth.md` — the walkthrough.
+- Tests: `test_secrets.py` (+15, file-backed fallback + precedence + perms + malformed) and
+  `test_brokers_morning_auth.py` (+4). 905 pass (1 skipped: POSIX perms → CI Ubuntu).
+
+**Done-when:** ☑ manual login → token exchange succeeds (proves `api_secret`); ☑ token persisted
+to the secrets interface (file store, `kite_access_token`); ☑ a new process reads it back; ☑ one
+successful daily login end-to-end; recorded here (date only, no token value).
+
+**Decisions / notes**
+- **File-backed store over `setx`** (operator's refinement): cross-platform from day one,
+  repository-pattern parity with the future AWS Secrets Manager backend, no env-var refresh
+  footgun, inspectable/wipeable file.
+- **Daily ritual:** the seed must be re-run each trading morning (token flushed ~05:00–07:30
+  IST); scheduling it + a richer cross-restart token store are **P5.2**; the live-host backend is
+  **Phase 8**.
+
+**Next subtask: P2A.3 — Real-data backfill: first historical pull.**
