@@ -8,6 +8,11 @@
 !.env.example
 *.key
 *.pem
+# File-backed secret store (P2A.2). Default path is ~/.quant-intraday/secrets.json,
+# outside the repo, so git never sees it; this is belt-and-suspenders if the path is
+# ever overridden to inside the working tree.
+secrets.json
+.quant-intraday/
 *.p12
 *.keystore
 *.jks

@@ -28,9 +28,12 @@ from quant.data.brokers.errors import SessionNotSeededError
 _logger = get_logger(__name__)
 
 #: Logical secret names (resolved by the secrets interface to the
-#: ``QUANT_SECRET_KITE_API_KEY`` / ``QUANT_SECRET_KITE_API_SECRET`` env vars).
+#: ``QUANT_SECRET_KITE_API_KEY`` / ``QUANT_SECRET_KITE_API_SECRET`` env vars, or the
+#: file-backed store). ``KITE_ACCESS_TOKEN_SECRET`` is the daily token the morning-auth
+#: helper (P2A.2) writes via ``Secrets.set`` and the engine/research read back.
 KITE_API_KEY_SECRET = "kite_api_key"
 KITE_API_SECRET_SECRET = "kite_api_secret"
+KITE_ACCESS_TOKEN_SECRET = "kite_access_token"
 
 
 @runtime_checkable

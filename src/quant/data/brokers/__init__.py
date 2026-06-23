@@ -8,6 +8,7 @@ the ``kiteconnect`` SDK is imported only inside this package — see
 """
 
 from quant.data.brokers.auth import (
+    KITE_ACCESS_TOKEN_SECRET,
     KITE_API_KEY_SECRET,
     KITE_API_SECRET_SECRET,
     InMemoryTokenStore,
@@ -28,6 +29,7 @@ from quant.data.brokers.errors import (
 )
 from quant.data.brokers.instruments import InstrumentRegistry
 from quant.data.brokers.kite import KiteAdapter
+from quant.data.brokers.morning_auth import seed_and_persist
 from quant.data.brokers.rate_limit import RateLimiter, TokenBucketRateLimiter
 from quant.data.brokers.ticker import (
     KiteTickerTransport,
@@ -37,6 +39,7 @@ from quant.data.brokers.ticker import (
 from quant.data.brokers.verify import VerificationResult, verify_credentials
 
 __all__ = [
+    "KITE_ACCESS_TOKEN_SECRET",
     "KITE_API_KEY_SECRET",
     "KITE_API_SECRET_SECRET",
     "KITE_INTERVALS",
@@ -58,5 +61,6 @@ __all__ = [
     "create_kite_client",
     "create_kite_ticker_transport",
     "normalize_interval",
+    "seed_and_persist",
     "verify_credentials",
 ]
