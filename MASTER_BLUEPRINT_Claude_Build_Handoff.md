@@ -755,7 +755,10 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 
 > **Tracking note:** this subtask meets the auto-trigger in Part II's "Research environment setup (operator runbook)" — persistent MLflow tracking is required, not optional. Stand up the research env per the runbook before starting work, and record persistent-tracking confirmation (run-IDs/experiment-IDs) in `docs/PROGRESS.md` for this subtask. Falling back to the in-memory tracker is a missed acceptance criterion.
 
+> **Real-data final run:** deferred to P2A.6; complete the deferral note in `docs/PROGRESS.md` against both P2.7 and P2A.6 when that run lands.
+
 #### P2.8 — Robustness battery + two-engine reconciliation
+- **Depends on:** the P2A gate (`gate-2a-real-data-path`) — real backfilled data, persistent MLflow, and the final P2.7 artifact must exist before P2.8 can validate anything.
 - **Goal:** stress the edge.
 - **Depends on:** P2.2, P2.7
 - **Deliverable:** parameter sensitivity, Monte Carlo shuffle, noise injection, cross-symbol, synthetic-data backtest; reconciliation against a second engine (VectorBT vs Backtrader/Nautilus).
@@ -776,6 +779,67 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 > **Tracking note:** this subtask meets the auto-trigger in Part II's "Research environment setup (operator runbook)" — persistent MLflow tracking is required, not optional. Stand up the research env per the runbook before starting work, and record persistent-tracking confirmation (run-IDs/experiment-IDs) in `docs/PROGRESS.md` for this subtask. Falling back to the in-memory tracker is a missed acceptance criterion.
 
 **GATE 2 — THE KILL-GATE:** no strategy proceeds toward capital without passing all seven criteria on honest, cost-inclusive, point-in-time data. Most ideas die here. Tag `gate-2-research`.
+
+---
+
+## PHASE 2A — Operator Actions: Broker, Credentials, Real-Data Path
+
+This subphase exists because the project has reached the transition from synthetic-data research to real-data research, and that transition requires actions the AI agent cannot perform on the operator's behalf — paid third-party signups, credentials that must live with the operator, regulatory steps the exchange/broker requires from the account holder. Without this subphase the "final P2.7 run" (deferred to P2.9) and everything from P2.8 onward is silently blocked.
+
+**Operating principle:** every subtask in 2A pairs an operator action with explicit AI guidance. The AI produces a written walkthrough first (screen-by-screen, field-by-field), then sits with the operator while they execute it, verifies the result, and updates `docs/PROGRESS.md`. The agent never holds the operator's broker credentials, payment methods, or 2FA secrets — those flow only into the project's secrets interface (`core/secrets.py`) or AWS Secrets Manager (Phase 8).
+
+**Gating:** P2A must complete before P2.8 begins. (P2.7's code work is already complete on synthetic data; the final registry-promotable P2.7 run is deferred to P2.9 and depends on P2A.)
+
+#### P2A.1 — Kite Connect: subscription + developer app creation
+- **Goal:** an active Kite Connect subscription with a registered developer app, yielding `api_key` and `api_secret` for this project.
+- **Depends on:** the operator has an active Zerodha trading account.
+- **Operator action (cannot be delegated):** sign in to the Zerodha account, subscribe to Kite Connect (₹2000/month, paid by the operator), create a developer app, configure the redirect URL, and copy the `api_key` and `api_secret` exactly once at app-creation time.
+- **AI guidance deliverable:** a step-by-step walkthrough document at `docs/operator_runbooks/P2A.1_kite_signup.md` written before the operator begins, covering: every screen and field on developers.kite.trade, what the redirect URL should be for a local-development setup, where to record the `api_key` (config) versus the `api_secret` (secrets interface only — never config, never git), what to do if the `api_secret` is closed without copying (it's irrecoverable; the app must be regenerated), and a verification step that confirms the credentials work via a single read-only API call (e.g. fetch the instrument list).
+- **Done when:** `api_key` is in `config/env/dev.yaml`, `api_secret` is set via the secrets interface (env var or secret store) and never committed to git, a verification script makes one read-only call successfully, and the act of obtaining credentials is recorded in `docs/PROGRESS.md` with the date (not the credentials themselves).
+- **Reference:** Part III Layer 1 §0.2; Ground Rule 2 (no hard-coded secrets).
+
+#### P2A.2 — Daily-auth flow: the manual TOTP seed
+- **Goal:** a working daily login routine that produces a fresh `access_token` from the `api_key` / `api_secret` / `request_token` flow, persisted to the secrets interface, ready for the engine to read.
+- **Depends on:** P2A.1.
+- **Operator action (cannot be delegated):** perform the once-per-day manual login (Zerodha credentials + TOTP), per SEBI's manual-login mandate.
+- **AI guidance deliverable:** a runbook at `docs/operator_runbooks/P2A.2_daily_auth.md` covering the OAuth dance, where to paste the `request_token`, how the SHA-256 checksum is computed (the AI generates the checksum), where the resulting `access_token` lands, and what to do when the token expires (next morning). The AI provides a small CLI helper script in `scripts/` that the operator runs in the morning and which writes the token to the secrets interface. Do not automate the TOTP itself — manual entry by the operator is the compliant path.
+- **Done when:** running the helper script in the morning yields a valid `access_token`, the engine and research code can read it via the secrets interface, and the runbook is verified by the operator completing one successful daily login end-to-end.
+- **Reference:** Part III Layer 5 §8.1 (morning auth/token routine); Project-specific Inviolable Rule 6.
+
+#### P2A.3 — Real-data backfill: first historical pull
+- **Goal:** the project's first real historical dataset in the storage layer — a defined liquid Nifty-50 / Nifty-100 universe, several years of 15-min bars (and finer intervals for feature computation per Part III Layer 1), backfilled through P1.4's job into P1.3's repository, with P1.5 hygiene applied.
+- **Depends on:** P2A.1 (credentials), P2A.2 (token), P1.4–P1.7 (code already exists).
+- **Operator action (cannot be delegated):** run the backfill (the data is pulled under the operator's Kite subscription and lands in the operator's local data store). Backfill runs locally — not AWS — at this stage; the dataset is a few GB of Parquet and the laptop is the right environment.
+- **AI guidance deliverable:** a runbook at `docs/operator_runbooks/P2A.3_backfill.md` defining the exact universe (config-driven, in `config/universe.yaml`), the date range, the intervals, the expected size on disk, the expected wall-clock time, and what success looks like (row counts per symbol; gap reports under tolerance; survivorship coverage including delisted names if applicable). The AI provides the run command and reads back the resulting Parquet to verify counts. Resumable on interruption per P1.4's design.
+- **Done when:** the data store contains the configured universe over the configured period, P1.5 hygiene checks pass on the pull, the data-quality dashboard (P1.9) reports green, and the dataset version is recorded in `docs/PROGRESS.md` alongside row/symbol counts.
+- **Reference:** Part III Layer 1; subtasks P1.4–P1.7, P1.9.
+
+#### P2A.4 — Research environment stand-up
+- **Goal:** the `.venv-research` env exists and is healthy, with persistent MLflow ready to record runs that will feed P2.8/P2.9.
+- **Depends on:** none (can run in parallel with P2A.1–P2A.3).
+- **Operator action (cannot be delegated):** run the recipe from Part II's "Research environment setup (operator runbook)" — three commands on the operator's machine.
+- **AI guidance deliverable:** the AI walks the operator through the recipe live, runs the verification line, starts the local MLflow server bound to 127.0.0.1, and confirms an end-to-end test run logs to it persistently.
+- **Done when:** `mlflow --version` runs inside `.venv-research`, the MLflow UI is reachable at http://127.0.0.1:5000, and a one-line test run from a research script appears in the UI as a persistent record.
+- **Reference:** Part II "Research environment setup (operator runbook)".
+
+#### P2A.5 — AWS account preparation (one-time, low effort, no resources yet)
+- **Goal:** an AWS account exists and is prepared for Phase 8 and the cloud-default research runs in P2.8 — but no compute resources are launched in this subtask. This is account hygiene only.
+- **Depends on:** none. Can run any time before P2.8.
+- **Operator action (cannot be delegated):** create the AWS account (or use an existing personal account), attach the operator's payment method, apply the $150 credits, enable MFA on the root account, create a dedicated IAM user for project access (programmatic + console), enable MFA on that IAM user, configure AWS Budgets per Part II's "Cost guardrails" subsection. Root credentials get locked away after the IAM user is created and never used again.
+- **AI guidance deliverable:** a runbook at `docs/operator_runbooks/P2A.5_aws_setup.md` covering every console click, exactly which IAM policies the project user needs (least-privilege — read project S3, manage spot EC2 in ap-south-1, write CloudWatch logs; nothing else), the Budgets configuration (50/80/100% alerts on the credit balance), how to apply the credits, and the verification that the IAM user can authenticate via `aws sts get-caller-identity` and nothing more permissive can be done (least-privilege check). The AI writes a single `aws/` config file in the repo containing the non-secret parts (region, account ID, IAM user ARN); the credentials go to the secrets interface, never the repo.
+- **Done when:** the IAM user can run `aws sts get-caller-identity` from the operator's machine via the secrets interface, the Budgets alerts are configured, the credits are applied and visible, root MFA is on, the IAM user has MFA, and `docs/PROGRESS.md` records that account preparation is complete (date and account-ID-tail only — never the credentials themselves).
+- **Important:** no EC2 instance is launched in this subtask, no S3 bucket is created, no NAT Gateway is created — those are deliberately deferred to the actual subtask that needs them (P2.8 for the bucket + first spot run, Phase 8 for the engine VPS). This subtask only prepares the account so those moves are friction-free when they come.
+- **Reference:** Part II "Cloud compute policy (AWS)".
+
+#### P2A.6 — Final P2.7 registry-promotable run on real data (operator-triggered)
+- **Goal:** retroactively complete the deferred final P2.7 run now that real data exists — produce the ensemble + regime-gate model artifact in `FileModelRegistry`, logged to persistent MLflow, ready to be judged by P2.8/P2.9.
+- **Depends on:** P2A.1, P2A.2, P2A.3, P2A.4. (Not P2A.5 — final P2.7 runs locally; cloud is for P2.8.)
+- **Operator action:** initiate the run; the AI executes the training using the code already merged from P2.7's PR, against the real backfilled data, against the persistent MLflow server, and writes the model card + artifact into the registry.
+- **AI guidance deliverable:** a single command, narrated; verification that the MLflow run is FINISHED, the registry artifact deserializes and predicts identically to the in-memory model, and the run-IDs are captured.
+- **Done when:** an MLflow run-ID exists, a `FileModelRegistry` artifact exists, both are recorded in `docs/PROGRESS.md` under P2A.6 and P2.7 (closing the deferral note), and the artifact is the input P2.8 will validate.
+- **Reference:** Part III Layer 2 §4.1; the P2.7 deferral note.
+
+**P2A gate:** the real-data path is live. Kite credentials work, daily auth works, real data is in the store, the research env is up, the AWS account is ready (no spend yet), and the final P2.7 artifact exists and is registry-promotable. Tag `gate-2a-real-data-path`. P2.8 (Robustness battery + two-engine reconciliation) can now begin against real data and a real model.
 
 ---
 
@@ -1076,9 +1140,15 @@ The program is a single ordered path of phases; each phase is a set of subtasks;
 | 2026-06-21 | P2.5 | ☑ done | `feat/p2.5-meta-fracdiff` | 728 passing (40 new) | `research/labeling/`: momentum/mean-reversion primary + `MetaLabeler` (side-aware bet/no-bet via shared `barriers.first_touch`); `research/features_research/`: `frac_diff` (binomial FFD, causal) + `adf_test` + `min_ffd` (min-d stationary, retains memory). Added `statsmodels` (resolves with pandas 3.x). 100% cov on new modules. Details in `docs/PROGRESS.md`. |
 | 2026-06-21 | P2.6 | ☑ done | `feat/p2.6-model-baseline` | 786 passing (58 new) | `research/models/`: LightGBM baseline (native API) evaluated **only under purged CV** (pooled OOS preds), permutation/MDA importance (not MDI), **isotonic calibration** (hand-rolled PAVA), purged-CV hyperparameter tuning, and experiment tracking (`ExperimentTracker` → in-memory default + lazy, confined **MLflow** adapter — operator-installed like arcticdb, since mlflow pins pandas<3). `LightGBMBaseline` implements the live `Model`. Added `lightgbm`; mlflow not a declared dep. 100% cov on new modules. Details in `docs/PROGRESS.md`. |
 | 2026-06-22 | P2.7 | ☑ done | `feat/p2.7-ensemble-regime-registry` | 884 passing (98 new) | `research/models/`: cross-family **ensemble** (LightGBM+XGBoost+hand-rolled-logistic behind one `Estimator` contract; **rank-average / stacking**, OOF-fit combiner+calibrator, live `Model`), **GMM regime gate** (diagonal-cov EM, deterministic; per-regime on/off/size-down; data-driven selection = kill-gate crit. 7), **model registry** (`ModelCard` w/ data/feature/label/model version tags + fingerprint; in-memory + `FileModelRegistry`), and `evaluate_ensemble_under_cpcv` (path-Sharpe distribution; gated recovers an edge that cancels ungated). Added `xgboost` (no pandas pin; confinement guard extended). ⚠️ persistent-MLflow **final run is operator action** (see PROGRESS). 100% cov on new modules. Details in `docs/PROGRESS.md`. |
+| | P2A.1 | ☐ todo | | | Kite Connect subscription + developer app → `api_key`/`api_secret` (operator paid signup; `api_secret` to the secrets interface only, never git). Runbook `docs/operator_runbooks/P2A.1_kite_signup.md`. |
+| | P2A.2 | ☐ todo | | | Daily manual-TOTP login → fresh `access_token` to the secrets interface; morning CLI helper in `scripts/`. Runbook `docs/operator_runbooks/P2A.2_daily_auth.md`. |
+| | P2A.3 | ☐ todo | | | First real backfill (liquid Nifty-50/100, multi-year 15-min + finer) via P1.4 → P1.3 + P1.5 hygiene; runs local. Runbook `docs/operator_runbooks/P2A.3_backfill.md`. |
+| | P2A.4 | ☐ todo | | | Stand up `.venv-research` + persistent MLflow bound to 127.0.0.1, per Part II's research-env runbook. |
+| | P2A.5 | ☐ todo | | | AWS account hygiene only — IAM user + MFA (root + user), Budgets (50/80/100%), $150 credits; no resources launched. Runbook `docs/operator_runbooks/P2A.5_aws_setup.md`. |
+| | P2A.6 | ☐ todo | | | Final registry-promotable P2.7 run on real data → MLflow run-ID + `FileModelRegistry` artifact (closes the P2.7 deferral); local. |
 | | … | | | | |
 
-**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
+**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
 
 ---
 
