@@ -1010,6 +1010,46 @@ This subphase exists because the project has reached the transition from synthet
 
 ---
 
+## PHASE 5A — Operator Actions: Live Infrastructure & Monitoring
+
+**Subphase principle:** Phase 5 built the operations code (scheduler, monitoring, drift detection, MLOps, platform plumbing). Phase 5A configures and authorizes the operator-only infrastructure that operations code expects to find — the things only the operator can stand up, pay for, or authenticate.
+
+#### P5A.1 — AWS engine VPS provisioning (Phase 8 prep, no live trading yet)
+- **Goal:** the Phase-8 Linux engine VPS exists in ap-south-1, with an Elastic IP attached, configured per Part II's Phase-8 runbook — but not yet registered with Kite as the static IP, and not yet running the engine. This is infrastructure standup only.
+- **Depends on:** P2A.5 (AWS account ready).
+- **Operator action (cannot be delegated):** launch the EC2 instance (smallest viable size per the runbook), attach an Elastic IP, configure the security group (inbound only from VPN/operator IP), enable IMDSv2, attach the least-privilege IAM instance profile, enable EBS encryption, set up daily AWS Backup, install the CloudWatch agent.
+- **AI guidance deliverable:** a walkthrough at `docs/operator_runbooks/P5A.1_engine_vps.md` with screen-by-screen instructions, the exact `aws` CLI commands (which the operator runs), verification that SSM Session Manager works (no SSH key needed), CloudTrail confirmation, and a smoke test that a Docker container can run on the host.
+- **Done when:** SSM Session Manager opens a shell, `docker run hello-world` succeeds, the Elastic IP is recorded in `docs/PROGRESS.md` (IP value redacted in git; the IP value lives in the secrets interface), and the instance's monthly burn matches expectations.
+- **Reference:** Part II "Standard runbook — Phase-8 live engine VPS"; Part III Layer 5 §8.8.
+
+#### P5A.2 — VPN / private network for the control surface
+- **Goal:** the control API (Layer 6) is reachable only from operator devices over a private network. Per Layer 6 security model.
+- **Depends on:** P5A.1.
+- **Operator action (cannot be delegated):** stand up the VPN solution (WireGuard self-hosted on the VPS, or Tailscale free tier — the AI walkthrough recommends one with the trade-offs); enroll the operator's laptop + phone as VPN clients; lock the control-API security-group inbound to the VPN's address range only.
+- **AI guidance deliverable:** `docs/operator_runbooks/P5A.2_vpn.md` covering choice of VPN (with reasons), every config step, MTU/firewall gotchas, how to revoke a client (the device-loss scenario), and verification that the control-API port is unreachable from the public internet (`nmap` from an external host).
+- **Done when:** the operator's laptop reaches the control-API over the VPN, an external scan confirms the port is closed publicly, and the device-revocation procedure is tested once.
+- **Reference:** Part III Layer 6 security model.
+
+#### P5A.3 — Alerting channels (Telegram/email + PagerDuty optional)
+- **Goal:** CRITICAL alerts from the platform layer (Part III Layer 5 §8.6) reach the operator within seconds, on a channel that will be seen.
+- **Depends on:** P5A.1.
+- **Operator action (cannot be delegated):** create the Telegram bot (the operator owns it), get the bot token, identify the chat ID, register both with the secrets interface; optionally set up a PagerDuty trial for harder-to-ignore criticals; configure email-on-CRITICAL fallback.
+- **AI guidance deliverable:** `docs/operator_runbooks/P5A.3_alerting.md` with BotFather steps, how to capture the chat ID, where the bot token lives (never in git), how the alerting code reads the credentials, and an end-to-end test that fires a fake CRITICAL on each channel and confirms receipt on the operator's phone.
+- **Done when:** a manually-triggered CRITICAL fires and arrives on the operator's phone within seconds on at least Telegram + email; the tested-fire is recorded in `docs/PROGRESS.md`.
+- **Reference:** Part III Layer 5 §8.6.
+
+#### P5A.4 — Backup verification (the restore that proves the backup)
+- **Goal:** the daily AWS Backup snapshots configured in P5A.1 are provably restorable. An untested backup is not a backup (Part III Layer 5 §8.8).
+- **Depends on:** P5A.1, at least 7 days of automated snapshots.
+- **Operator action (cannot be delegated):** trigger a restore drill — restore a snapshot to a fresh test instance, verify the data and config come back intact, then terminate the test instance.
+- **AI guidance deliverable:** `docs/operator_runbooks/P5A.4_restore_drill.md` covering the exact AWS Backup restore steps, what to verify on the restored instance, expected duration, expected cost (~$0 for a brief test instance on the existing volume class), and the schedule for repeating the drill (quarterly).
+- **Done when:** a snapshot restored to a fresh instance opens via SSM with intact data and config; the test instance is terminated; the drill is recorded in `docs/PROGRESS.md` with a calendar reminder for the next quarterly drill.
+- **Reference:** Part III Layer 5 §8.8.
+
+**P5A gate:** the operator-owned live infrastructure exists, is reachable only over VPN, alerts reach the operator, and backups are provably restorable. Tag `gate-5a-live-infra`. Phase 6 (paper trading) can now run against real infrastructure.
+
+---
+
 ## PHASE 6 — Paper Trading
 
 #### P6.1 — End-to-end paper trading
@@ -1085,18 +1125,76 @@ This subphase exists because the project has reached the transition from synthet
 
 ---
 
+## PHASE 7A — Operator Actions: Mobile App Build & Signing
+
+**Subphase principle:** Phase 7 produced the control-API source, the PWA dashboard source, and the APK build configuration. Phase 7A is the operator-only signing, installation, and authentication setup — none of which the AI can or should do.
+
+#### P7A.1 — APK signing keystore generation
+- **Goal:** a signing keystore exists, held only by the operator, used to sign all APK builds for this project. Anyone who holds this key can publish updates as the operator — irreplaceable if lost, catastrophic if leaked.
+- **Depends on:** P7.6 (build config exists).
+- **Operator action (cannot be delegated):** generate the keystore (`keytool`), set a strong passphrase, back up the keystore to two offline locations (e.g., encrypted USB stick + encrypted cloud archive), record the SHA-256 fingerprint, configure the build to sign with it.
+- **AI guidance deliverable:** `docs/operator_runbooks/P7A.1_keystore.md` with the exact `keytool` command, passphrase requirements, the two-backup discipline (and why), how to record the fingerprint without recording the key, what to do if the key is lost (you cannot recover — you would publish a new app under a new identity), and the build configuration line that references the local keystore path.
+- **Done when:** the keystore exists locally, two offline backups are confirmed, the fingerprint is recorded in `docs/PROGRESS.md`, and a test APK builds and signs successfully. The keystore itself is never committed to git (verify `.gitignore` covers `*.keystore` and `*.jks`).
+- **Reference:** Part III Layer 6 stack section.
+
+#### P7A.2 — Signed APK build and sideload
+- **Goal:** a signed APK is installed on the operator's phone, opening as a real installed app (not a browser tab), authenticating cleanly to the control API over the VPN.
+- **Depends on:** P7A.1, P5A.2 (VPN), P7.5 (PWA dashboard live), P7.7 (security validation complete).
+- **Operator action (cannot be delegated):** run the local build to produce a signed APK; sideload it to the operator's phone (developer mode + USB transfer, or a private Play Console internal track); install; enroll the device with biometric lock; complete the device-registration flow with the control API to receive a short-lived, revocable device token.
+- **AI guidance deliverable:** `docs/operator_runbooks/P7A.2_apk_install.md` covering the build command, sideload paths (Windows + Android), enabling developer mode without compromising the phone's security posture, the device-registration handshake with the API, the biometric setup, the stolen-phone revocation test (revoke the device token from the VPS and confirm the app loses access within the session).
+- **Done when:** the installed app authenticates to the control API over VPN, biometric lock is on, a deliberate stolen-phone revocation test passes (operator revokes from VPS → app reaches the API → access denied), and the install + tested-revocation is recorded in `docs/PROGRESS.md`.
+- **Reference:** Part III Layer 6 security checklist.
+
+**P7A gate:** the operator holds the signing key, the signed APK is installed on the operator's phone with verified revocation, and the full Layer-6 security checklist has been walked end-to-end. Tag `gate-7a-app-installed`. Phase 8 micro-live can now begin with the panic-flatten path tested and reachable from the operator's pocket.
+
+---
+
+## PHASE 8A — Operator Actions: Going Live (the no-going-back subphase)
+
+**Subphase principle:** every action here moves the system one step closer to real money in motion. Each subtask is small, gated, and reversible (until the final one). The operator initiates each; the AI verifies. The operator may pause at any subtask boundary and remain there indefinitely — there is no obligation to proceed once a subtask is complete.
+
+#### P8A.1 — Static-IP registration with the broker
+- **Goal:** the engine's Elastic IP is registered with Zerodha Kite Connect as the static IP for order placement, satisfying SEBI's static-IP-whitelist mandate. After this step, the EIP must never change (losing it means re-registering, lost trading days).
+- **Depends on:** P5A.1 (EIP exists), P2A.1 (Kite Connect account).
+- **Operator action (cannot be delegated):** log in to the Kite developer console, paste the engine's EIP into the static-IP whitelist, save, verify acceptance.
+- **AI guidance deliverable:** `docs/operator_runbooks/P8A.1_static_ip.md` with screen captures of the developer console section, the verification step (a real order-endpoint call from the EIP returns success rather than rejected-IP), explicit "do not change the EIP after this point" warning, and the documented procedure for re-registering if the EIP ever does change (and the lost trading time it implies).
+- **Done when:** a verification order-endpoint call from the EIP is accepted, and the registered IP value is recorded in the secrets interface plus a redacted note in `docs/PROGRESS.md`.
+- **Reference:** Part II Phase-8 runbook; Project-specific Inviolable Rule 6.
+
+#### P8A.2 — Funding the live account (operator decision + transfer)
+- **Goal:** the live Zerodha account holds the agreed micro-live capital (~₹40k per the project plan's micro-live decision) — money the operator is willing to lose for the validation purpose Phase 8 exists for.
+- **Depends on:** the operator's own readiness; the kill-gate (Gate 2/Gate 2A.6) passed.
+- **Operator action (cannot be delegated):** transfer funds into the Zerodha account from the operator's bank.
+- **AI guidance deliverable:** `docs/operator_runbooks/P8A.2_funding.md` is a single short page reiterating: this is validation capital, not income capital; >90% of retail F&O traders lose money; the only purpose at this stage is "does live behave like paper" not "make money"; the kill-criteria for stopping live entirely (Part III Layer 5 §8.9) are pre-committed before funds are transferred.
+- **Done when:** funds visible in the Zerodha account; the date and amount recorded in `docs/PROGRESS.md` (private notes; not committed publicly if the repo is ever shared).
+- **Reference:** Part II's honesty frame; Part III Layer 5 §8.9 (kill criteria).
+
+#### P8A.3 — First live session: micro-live trading begins (operator-gated, daily for first week)
+- **Goal:** the engine begins trading the live account at micro-size, with the operator present and ready to invoke the panic-flatten path from their phone if anything looks wrong. The first week is manually re-authorized each morning — the operator decides each day whether to trade.
+- **Depends on:** P8A.1, P8A.2, every previous gate passed.
+- **Operator action (cannot be delegated):** each morning of week 1 — complete the daily TOTP login (P2A.2 routine), review the pre-open gate output, explicitly authorize the engine to begin trading for that day (a manual confirmation, not an automatic resume), and monitor through the session.
+- **AI guidance deliverable:** `docs/operator_runbooks/P8A.3_first_week.md` covers the morning routine, what "looks normal" looks like during the day, when to invoke the panic-flatten path (immediate, no second-guessing — Layer 6's superpower is the off switch), the end-of-day reconcile review, and the criteria for proceeding to P8.B1 (after-week-one automated micro-live).
+- **Done when:** five consecutive trading days complete with operator authorization each morning, no unhandled incidents, end-of-day reconcile clean each day, and the operator personally signs off on transitioning to the automated micro-live regime (P8.B1) — or pauses indefinitely.
+- **Reference:** Part III Layer 5 lifecycle; Part III Layer 6 security; the project plan's Phase 4 / blueprint Phase 8 honesty.
+
+**P8A gate:** static IP registered, account funded, the first authorized live trading week completed without incident, the operator signs off. Tag `gate-8a-first-week-live`. P8.B1 (the existing "Go live, trivially small" subtask, now post-renumber) can proceed.
+
+---
+
 ## PHASE 8 — Live, Micro Size *(operator-driven; Claude assists, never acts alone)*
 
-#### P8.1 — Go live, trivially small
+Phase 8 begins with the operator subphase P8A above; the engineering subtasks below assume `gate-8a-first-week-live` has passed.
+
+#### P8.B1 — Go live, trivially small
 - **Goal:** validate live ≈ paper, not to make money.
 - **Depends on:** GATE 6, GATE 7
 - **Deliverable:** live deployment with trivial capital; full monitoring/drift/limits/alerts/panic-flatten active. **Operator confirms and executes; Claude does not place real orders.**
 - **Done when:** live behaves like paper; all safety systems verified live; daily reports clean.
 - **Reference:** Project plan Phase 4.
 
-#### P8.2 — Sustained live validation
+#### P8.B2 — Sustained live validation
 - **Goal:** earn the right to scale.
-- **Depends on:** P8.1
+- **Depends on:** P8.B1
 - **Deliverable:** months of live track record vs expectations; honest performance audit.
 - **Done when:** sustained live performance is consistent with the backtest distribution before any capital increase.
 - **Reference:** Project plan Phase 4.
@@ -1147,8 +1245,17 @@ This subphase exists because the project has reached the transition from synthet
 | | P2A.5 | ☐ todo | | | AWS account hygiene only — IAM user + MFA (root + user), Budgets (50/80/100%), $150 credits; no resources launched. Runbook `docs/operator_runbooks/P2A.5_aws_setup.md`. |
 | | P2A.6 | ☐ todo | | | Final registry-promotable P2.7 run on real data → MLflow run-ID + `FileModelRegistry` artifact (closes the P2.7 deferral); local. |
 | | … | | | | |
+| | P5A.1 | ☐ todo | | | AWS engine VPS standup in ap-south-1 (EIP, IMDSv2, least-priv IAM profile, EBS encryption, daily AWS Backup, CloudWatch agent) — not Kite-registered, engine not running. Runbook `docs/operator_runbooks/P5A.1_engine_vps.md`. |
+| | P5A.2 | ☐ todo | | | VPN / private network (WireGuard or Tailscale) for the control API; SG locked to the VPN range; public-port-closed verified; device revocation tested. Runbook `docs/operator_runbooks/P5A.2_vpn.md`. |
+| | P5A.3 | ☐ todo | | | Alerting channels — operator-owned Telegram bot + email (PagerDuty optional); credentials to the secrets interface; CRITICAL test-fire to phone. Runbook `docs/operator_runbooks/P5A.3_alerting.md`. |
+| | P5A.4 | ☐ todo | | | Backup restore drill — restore a snapshot to a fresh instance, verify, terminate; quarterly cadence. Runbook `docs/operator_runbooks/P5A.4_restore_drill.md`. |
+| | P7A.1 | ☐ todo | | | APK signing keystore generation — operator-held, two offline backups, SHA-256 fingerprint recorded; `*.keystore`/`*.jks` gitignored. Runbook `docs/operator_runbooks/P7A.1_keystore.md`. |
+| | P7A.2 | ☐ todo | | | Signed APK build + sideload to operator phone; device registration over VPN + biometric lock; stolen-phone revocation test. Runbook `docs/operator_runbooks/P7A.2_apk_install.md`. |
+| | P8A.1 | ☐ todo | | | Static-IP (EIP) registration with Kite (SEBI mandate); EIP must never change after. Runbook `docs/operator_runbooks/P8A.1_static_ip.md`. |
+| | P8A.2 | ☐ todo | | | Fund the live account (~₹40k validation capital); kill-criteria pre-committed. Runbook `docs/operator_runbooks/P8A.2_funding.md`. |
+| | P8A.3 | ☐ todo | | | First live week — daily operator-authorized micro-live, panic-flatten ready; 5 clean days → sign off (or pause). Runbook `docs/operator_runbooks/P8A.3_first_week.md`. |
 
-**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐
+**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
 
 ---
 
