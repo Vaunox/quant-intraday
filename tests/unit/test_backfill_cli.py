@@ -13,9 +13,13 @@ import pytest
 
 from quant.core.config import load_config
 from quant.core.interfaces import Repository
+from quant.core.secrets import EnvSecrets, FileSecretStore
+from quant.data.brokers.auth import KITE_ACCESS_TOKEN_SECRET, InMemoryTokenStore
+from quant.data.brokers.errors import SessionNotSeededError
 from quant.data.ingest import backfill_cli
 from quant.data.ingest.backfill import day_end, day_start
 from quant.data.ingest.backfill_cli import (
+    apply_session_token,
     build_arg_parser,
     build_repository,
     main,
@@ -23,6 +27,7 @@ from quant.data.ingest.backfill_cli import (
     resolve_symbols,
 )
 from quant.data.store.parquet import ParquetArchive
+from tests.unit.brokers_fakes import FakeKiteClient
 from tests.unit.ingest_fakes import FakeHistoricalAdapter
 
 REPO_CONFIG = Path(__file__).resolve().parents[2] / "config"
@@ -216,3 +221,34 @@ def test_main_uses_checkpoint_override(tmp_path: Path) -> None:
     )
     assert code == 0
     assert checkpoint.is_file()  # resume state written at the override path
+
+
+# ------------------------------------------------- apply_session_token (P2A.3)
+_API_SECRET = "s" * 32
+
+
+def test_apply_session_token_seeds_from_request_token() -> None:
+    client = FakeKiteClient()
+    token_store = InMemoryTokenStore()
+    secrets = EnvSecrets(environ={"QUANT_SECRET_KITE_API_SECRET": _API_SECRET})
+    apply_session_token(client, token_store, secrets, "req-token")
+    assert token_store.get_access_token() == "access-token-xyz"  # FakeKiteClient session
+    assert client.access_token == "access-token-xyz"
+    assert client.generate_session_calls == [("req-token", _API_SECRET)]
+
+
+def test_apply_session_token_loads_from_secrets_when_no_request_token(tmp_path: Path) -> None:
+    store = FileSecretStore(tmp_path / "secrets.json")
+    store.set(KITE_ACCESS_TOKEN_SECRET, "today-token")
+    client = FakeKiteClient()
+    token_store = InMemoryTokenStore()
+    apply_session_token(client, token_store, EnvSecrets(environ={}, file_store=store), None)
+    assert token_store.get_access_token() == "today-token"
+    assert client.access_token == "today-token"
+    assert client.generate_session_calls == []  # no OAuth exchange when the token is on file
+
+
+def test_apply_session_token_raises_when_nothing_available(tmp_path: Path) -> None:
+    secrets = EnvSecrets(environ={}, file_store=FileSecretStore(tmp_path / "secrets.json"))
+    with pytest.raises(SessionNotSeededError, match="no Kite access token"):
+        apply_session_token(FakeKiteClient(), InMemoryTokenStore(), secrets, None)
