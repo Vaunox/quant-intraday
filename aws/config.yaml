@@ -1,0 +1,11 @@
+# Non-secret AWS identifiers for this project (P2A.5).
+#
+# NO credentials here. The IAM user's access key lives only in ~/.aws/credentials (outside the
+# repo) / AWS Secrets Manager on the live host (Phase 8) — never committed, never logged.
+# Everything project-side is locked to ap-south-1 (Mumbai); the IAM policy explicitly denies
+# other regions. No compute resources exist yet (S3 bucket → P2.8; engine VPS/EIP → P5A.1/Phase 8).
+
+region: ap-south-1
+account_id: "656019698719"
+iam_user_arn: "arn:aws:iam::656019698719:user/quant-intraday-ops"
+iam_policy: quant-intraday-ops-policy   # least-privilege: spot EC2 + project S3 + CloudWatch, Mumbai-only
