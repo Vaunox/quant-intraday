@@ -26,9 +26,16 @@ from pathlib import Path
 from quant.core.config import Config, load_config, load_universe
 from quant.core.interfaces import BrokerAdapter, Repository
 from quant.core.logging import get_logger
-from quant.core.secrets import EnvSecrets, Secrets
-from quant.data.brokers.auth import KITE_API_KEY_SECRET, InMemoryTokenStore, KiteAuthenticator
-from quant.data.brokers.client import create_kite_client
+from quant.core.secrets import Secrets, default_secrets
+from quant.data.brokers.auth import (
+    KITE_ACCESS_TOKEN_SECRET,
+    KITE_API_KEY_SECRET,
+    InMemoryTokenStore,
+    KiteAuthenticator,
+    TokenStore,
+)
+from quant.data.brokers.client import KiteClient, create_kite_client
+from quant.data.brokers.errors import SessionNotSeededError
 from quant.data.brokers.instruments import InstrumentRegistry
 from quant.data.brokers.kite import KiteAdapter
 from quant.data.brokers.rate_limit import TokenBucketRateLimiter
@@ -136,21 +143,52 @@ def build_repository(config: Config, tier: str) -> Repository:
     raise ValueError(f"unknown storage tier {tier!r}; choose one of {', '.join(_TIERS)}")
 
 
+def apply_session_token(
+    client: KiteClient,
+    token_store: TokenStore,
+    secrets: Secrets,
+    request_token: str | None,
+) -> None:
+    """Make today's access token available on ``client`` and ``token_store``.
+
+    Two paths: if a ``request_token`` is given, run the OAuth exchange
+    (:meth:`~quant.data.brokers.auth.KiteAuthenticator.seed_session`); otherwise load today's
+    ``access_token`` from the secrets interface (``kite_access_token``, seeded by the P2A.2
+    morning helper). This lets the backfill run off the daily-seeded token with no
+    ``--request-token`` to paste each run.
+
+    Raises:
+        SessionNotSeededError: If neither a ``request_token`` nor a stored ``access_token`` is
+            available.
+    """
+    if request_token:
+        KiteAuthenticator(client, secrets, token_store).seed_session(request_token)
+        return
+    access_token = secrets.get_optional(KITE_ACCESS_TOKEN_SECRET)
+    if access_token is None:
+        raise SessionNotSeededError(
+            "no Kite access token available: seed today's session with the morning helper "
+            "(scripts/kite_morning_auth.py), or pass --request-token to seed inline"
+        )
+    client.set_access_token(access_token)
+    token_store.set_access_token(access_token)
+
+
 def build_adapter(
     config: Config, secrets: Secrets, request_token: str | None
 ) -> BrokerAdapter:  # pragma: no cover - constructs the live Kite SDK client + network calls
     """Construct a live :class:`KiteAdapter` (operator path; needs SDK + credentials).
 
-    Builds the SDK client, optionally seeds today's session from ``request_token``,
-    indexes the instruments dump, and wires the data-endpoint rate limiter. Excluded
-    from coverage: it requires the live Kite Connect SDK, real credentials, and network
-    access, none of which exist in CI. Tests inject a fake adapter via :func:`main`.
+    Builds the SDK client, applies today's session token (from ``request_token`` or the secrets
+    interface via :func:`apply_session_token`), indexes the instruments dump, and wires the
+    data-endpoint rate limiter. Excluded from coverage: it requires the live Kite Connect SDK,
+    real credentials, and network access, none of which exist in CI. Tests inject a fake adapter
+    via :func:`main` and cover the token logic via :func:`apply_session_token`.
     """
     api_key = secrets.get(KITE_API_KEY_SECRET)
     client = create_kite_client(api_key, root=config.broker.api_base_url)
     token_store = InMemoryTokenStore()
-    if request_token:
-        KiteAuthenticator(client, secrets, token_store).seed_session(request_token)
+    apply_session_token(client, token_store, secrets, request_token)
     instruments = InstrumentRegistry.from_client(client, config.market.exchange)
     rate_limiter = TokenBucketRateLimiter(config.broker.rate_limits.data_requests_per_second)
     return KiteAdapter(
@@ -205,7 +243,9 @@ def main(
     environ = os.environ if environ is None else environ
 
     config = load_config(env=args.env, environ=environ)
-    secrets = EnvSecrets(environ=environ)
+    secrets = default_secrets(
+        environ=environ
+    )  # env vars + the file-backed store (kite_access_token)
     start = parse_ist_date(args.start, end=False)
     end = parse_ist_date(args.end, end=True)
     interval = args.interval or config.ingest.backfill_interval
