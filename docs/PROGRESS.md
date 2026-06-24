@@ -47,7 +47,7 @@ Updated at the end of every session.
 | 2026-06-21 | P2.5 Meta-labeling + fractional differentiation | ☑ done | `feat/p2.5-meta-fracdiff` | 40 new (728 total) | `research/labeling/`: `momentum_side`/`mean_reversion_side` primary rules + `MetaLabeler` (side-aware bet/no-bet via a shared `barriers.first_touch`); `research/features_research/`: `frac_diff` (binomial FFD) + `adf_test` (statsmodels) + `min_ffd` (min-d stationary, retains memory). Added `statsmodels` dep (resolves with pandas 3.x). 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.6 Model: baseline + tracking + calibration | ☑ done | `feat/p2.6-model-baseline` | 58 new (786 total) | `research/models/`: LightGBM baseline (native API) evaluated only under purged CV (pooled OOS predictions); permutation/MDA importance computed within the CV (not MDI); isotonic probability calibration (hand-rolled PAVA, no sklearn); purged-CV `HyperparameterTuner`; `ExperimentTracker` (in-memory default + lazy, confined `MLflowExperimentTracker` — operator-installed, pandas<3). `LightGBMBaseline` implements the live `Model`. Added `lightgbm`; mlflow not a declared dep. 100% cov on new modules. See notes. |
 | 2026-06-22 | P2.7 Ensemble + regime gate + registry | ☑ done | `feat/p2.7-ensemble-regime-registry` | 98 new (884 total) | `research/models/`: cross-family ensemble (LightGBM+XGBoost+logistic; rank-average/stack, OOF combiner+calibrator), GMM regime gate, `FileModelRegistry` (data/feature/label/model version tags + fingerprint), `evaluate_ensemble_under_cpcv`. Added `xgboost`. **Final registry-promotable run on real data was deferred to P2A.6 — now done** (run `e24c0cd6…`, artifact `ensemble-regime-v1-0001`). 100% cov on new modules. See notes. |
-| | P2.8 Robustness battery + two-engine reconciliation | ☐ todo (unblocked: real artifact ready) | | | |
+| 2026-06-25 | P2.8 Robustness battery + two-engine reconciliation | ☑ done | `feat/p2.8-robustness-battery` | 69 new (1016 total) | `research/validation/{robustness,reconcile}.py` (5 stress tests + independent vectorised engine) + `research/pipeline/robustness{,_cli}.py` orchestration; ran vs the real P2A.6 artifact (MLflow exp `p2.8-robustness` id 3, 14 runs), **engines reconcile exactly** (max money diff 0.0); edge weak (~0.04 per-obs path-Sharpe). 100% cov on new modules. See notes. |
 | | P2.9 Validation report + kill-gate emitter | ☐ todo | | | |
 | | **GATE 2 — THE KILL-GATE** | ☐ | | | Tag `gate-2-research`. |
 
@@ -1808,3 +1808,97 @@ is P2.8 (robustness) and P2.9's (DSR/PBO/CPCV) verdict, not this run's.
   research env + AWS prep + the final P2.7 artifact all exist. Tagging is the operator's call.
 
 **Next subtask: P2.8 — Robustness battery + two-engine reconciliation (against this artifact).**
+
+### 2026-06-25 — P2.8 Robustness battery + two-engine reconciliation ☑
+
+**Goal:** stress the registered ensemble + regime-gate edge from the five §4b.7 angles and
+reconcile a sample strategy across two independent backtest engines — the inputs to kill-gate
+criterion 6 (P2.9 emits the verdict). Runbook: `docs/operator_runbooks/P2.8_robustness.md`.
+
+**Reference (Ground Rule 9):** Deep Dive #2 §4b.7 (the robustness battery: parameter sensitivity,
+Monte Carlo trade shuffle, noise injection, cross-symbol, synthetic-data; the implementation-risk
+two-engine check), §4b.8 (tooling — *"implement the math directly … don't black-box it"*), the
+kill-gate (criterion 6), Inviolable Rule 7 (honesty about a weak edge), Part II cloud policy
+(P2.8 is cloud-by-default; local smoke on the same code path before any cloud run) + the
+research-env/MLflow auto-trigger (persistent tracking required).
+
+**Design decision — independent in-house second engine, not VectorBT/Backtrader (Ground Rule 9,
+surfaced to the operator).** §4b.8 names those libraries as *examples* of the fast-vectorised vs
+event-driven pair but equally sanctions implementing the math directly — which is the whole
+codebase's ethos (no sklearn/SciPy; hand-rolled PAVA/GMM/logistic/`NormalDist`) to keep the engine
+env lean (Part II Environment Policy). VectorBT pins numpy/numba and Backtrader is unmaintained;
+more decisively, a third-party engine knows nothing of our Indian cost model or next-bar-open +
+intraday-square-off rules, so it could never reconcile *within tolerance* without re-implementing
+those semantics inside it anyway. So `VectorizedBacktester` is an independent, fully **vectorised**
+reimplementation that shares the *injected* cost/slippage models but differs entirely in
+simulation structure (whole-array `diff`/`cumsum` vs the P2.1 per-bar loop) — the property the
+reconciliation isolates. The simpler/more-robust/more-testable option per the blueprint preamble.
+
+**Delivered (`research/validation/`, model-agnostic — the battery imports no model library, so
+confinement + clean layering hold):**
+- `robustness.py` — `StrategyDataset` + the five stress primitives, each taking an injected
+  `EvaluateFn`/score/builder (Ground Rule 1) so they're pure validation utilities testable with
+  fakes: `parameter_sensitivity` (knife-edge via CV / sign-flip), `monte_carlo_shuffle`
+  (order-dependent max-drawdown distribution), `noise_injection` (per-feature-std Gaussian decay),
+  `cross_symbol_validation` (leave-one-symbol-out held-out Sharpe), `synthetic_data_backtest`
+  (driftless GBM, edge must centre ~0) + a vectorised `geometric_brownian_bars` generator.
+- `reconcile.py` — `VectorizedBacktester` (independent vectorised engine, same contract as the
+  P2.1 `Backtester`) + `reconcile_engines` → `ReconciliationReport` (per-metric money diffs,
+  pass/fail within tolerance).
+
+**Delivered (`research/pipeline/`, the layer that wires the real model in — as `final_run` does):**
+- `robustness.py` — `run_robustness_battery`: rebuild the pooled real dataset, run all five tests
+  against the recipe (the `cross_family_estimators` stack + gate, re-fit OOS per CPCV split under
+  perturbation), load the registered artifact and reconcile its own signal through both engines,
+  and log every variant as its own tracker run (the honest trial count for P2.9). Promoted the
+  shared estimator stack to `models/estimators.cross_family_estimators` (DRY with `final_run`).
+- `robustness_cli.py` + `scripts/run_robustness.py` — one narrated command; `--tracker mlflow`
+  default (no silent in-memory fallback); exit 1 only if the engines disagree (an implementation
+  bug), never for a weak edge.
+- `core/config.py` + `config/default.yaml` — a `robustness` config section (CPCV scheme, noise
+  levels/repeats, MC shuffles, synthetic universes/sessions, knife-edge CV threshold, reconcile
+  tolerance, seed); every knob is config, not a literal (Ground Rule 2).
+
+**Executed (AI, local smoke vs the real P2A.6 artifact, persistent MLflow → sqlite, research env):**
+full backfill `2021-06-24 → 2026-06-23`, 8-symbol universe, reduced battery knobs (a fast smoke on
+the same code path — the Part II prerequisite before any cloud run). **Exit 0, engines reconcile
+exactly.**
+
+| item | value |
+|---|---|
+| MLflow | experiment `p2.8-robustness` (id **3**), **14 runs** logged (one per stress variant) |
+| reconciliation | `max_money_diff` **0.0** — the vectorised engine is bit-identical to the event-driven `Backtester` on the artifact's sample strategy |
+| parameter sensitivity | baseline median path-Sharpe ≈ 0.040; all variants 0.040–0.049 (no knife-edge, no sign flip) |
+| noise injection | median ≈ 0.036 → 0.032 → 0.037 across levels 0.05–0.5 (graceful, stays positive) |
+| monte carlo | drawdown percentile-rank 0.965 (observed ordering not anomalously benign) |
+| cross-symbol | leave-one-out median held-out Sharpe ≈ 0.044 |
+| synthetic (no-luck) | mean median ≈ 0.031 (near zero → no spurious edge / leak) |
+
+**Done-when:** ☑ each of the five tests runs and reports; ☑ two engines reconcile within tolerance
+on a sample strategy (exactly, 0.0); ☑ persistent MLflow records every variant (run-IDs above);
+☑ tested.
+
+**Verification (all green, engine env, Py 3.12):** ruff, black, mypy strict (218 files), pre-commit
+(12 hooks); **1016 tests pass (69 new), 1 skipped** (POSIX-only); **100% coverage** on all four new
+modules (`robustness`, `reconcile`, `pipeline/robustness`, `pipeline/robustness_cli`).
+
+**Honesty note (Inviolable Rule 7).** The edge is **weak** — per-observation CPCV path-Sharpes
+cluster around 0.04, consistent with P2A.6's OOS AUC ≈ 0.52. The battery's job is to *measure and
+report* (which it did, cleanly, on real data); whether the edge clears the **seven-point kill-gate**
+(annualised CPCV median > 1.0, DSR, PBO, etc.) is **P2.9's** verdict, not this subtask's. On this
+seed universe it almost certainly will not — and failing on a laptop is the system working.
+
+**Follow-ups / notes (deferred, tracked):**
+- **Full-fidelity cloud run.** This was a reduced local smoke. The default-knob battery (1000 MC
+  shuffles, 4 noise levels × 3 repeats, 8 synthetic universes × 60 sessions, `num_boost_round=300`)
+  is the heaviest single research run — cloud-by-default per Part II (spot `c7i.8xlarge`,
+  `ap-south-1`, ≈3–6 h). It's operator-approved/triggered; the runbook documents it. Not required
+  to satisfy P2.8's acceptance criteria (the smoke did), but it is the input P2.9 should consume.
+- **Battery evaluates unweighted.** The CPCV re-evaluation drops the P2.4 sample weights (the
+  battery stresses the signal's robustness; unweighted is the more conservative read). Threading
+  weights through is a tracked refinement, not built here.
+- **Sample-strategy sizing is a placeholder.** The reconciliation derives integer share targets
+  from the gated signal via a crude `round(gated · capital / price)` (full conviction ≈ 1× capital
+  in the name) — enough to drive identical fills. Real sizing is **P3.4** (vol-target + ¼-Kelly).
+
+**Next subtask: P2.9 — Validation report + kill-gate emitter.**

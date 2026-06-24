@@ -176,6 +176,21 @@ pipeline:
   registry_model_version: ensemble-regime-v1  # registry key for the final artifact (§4 contract)
   registry_dir: "models/registry" # FileModelRegistry root (gitignored runtime cache)
 
+robustness:
+  # Robustness battery (P2.8, Deep Dive #2 §4b.7): stress the edge before trusting it.
+  cpcv_groups: 6                  # CPCV groups N the battery re-evaluates the strategy under
+  cpcv_test_groups: 2             # test groups k per split (1 <= k < N) -> phi = C(N-1,k-1) paths
+  cpcv_embargo_pct: 0.01          # forward embargo ~ label horizon / sample length
+  knife_edge_cv_threshold: 1.0    # param sensitivity: knife-edge if variant-median CV exceeds this
+  noise_levels: [0.05, 0.1, 0.25, 0.5]  # relative feature-std noise magnitudes to sweep
+  noise_repeats: 3                # noisy evaluations averaged per level
+  monte_carlo_shuffles: 1000      # trade-order shuffles for the equity-path-shape test
+  synthetic_universes: 8          # no-real-luck synthetic universes to simulate
+  synthetic_sessions: 60          # weekday sessions per synthetic universe
+  synthetic_edge_threshold: 0.5   # flag a methodology leak if the no-signal mean median exceeds this
+  reconcile_tolerance_inr: 0.000001  # max money difference two engines may disagree by (INR)
+  random_seed: 7                  # seed every RNG the battery uses (reproducibility)
+
 logging:
   level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL
   format: json                    # json | text

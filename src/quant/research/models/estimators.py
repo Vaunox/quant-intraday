@@ -285,3 +285,18 @@ class LogisticEstimator:
             )
             bias -= self.learning_rate * (float(residual.sum()) / weight_total)
         return FittedLogistic(weights, bias, mean, scale, names)
+
+
+def cross_family_estimators(config: ModelConfig) -> tuple[Estimator, ...]:
+    """The §4.1 cross-family stack: LightGBM + XGBoost + a hand-rolled logistic (diversity).
+
+    The single definition of the production ensemble's members, shared by the final training
+    run (P2A.6) and the robustness battery (P2.8) so they stress exactly the model that ships
+    (Ground Rule 4 — one source of truth, not two drifting copies). *"Diversity across model
+    families is more robust than one big tuned model"* (§4.1, Step 3).
+    """
+    return (
+        LightGBMEstimator.from_config(config),
+        XGBoostEstimator.from_config(config),
+        LogisticEstimator(),
+    )

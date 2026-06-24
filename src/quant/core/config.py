@@ -386,6 +386,54 @@ class PipelineConfig(_Section):
     registry_dir: str = "models/registry"
 
 
+class RobustnessConfig(_Section):
+    """Robustness-battery parameters (Layer 2, P2.8 — Deep Dive #2 §4b.7).
+
+    The battery stresses the edge from five angles; these are its tunable knobs (Ground Rule 2:
+    every threshold, noise level, and shuffle count is config, never a literal). ``cpcv_groups`` /
+    ``cpcv_test_groups`` define the CPCV scheme the battery re-evaluates the strategy under
+    (φ = C(N-1, k-1) paths); ``knife_edge_cv_threshold`` is the parameter-sensitivity overfit flag;
+    ``noise_levels`` / ``noise_repeats`` drive the feature-noise sweep; ``monte_carlo_shuffles``
+    the trade-order resampling; ``synthetic_*`` the no-real-luck backtest; and
+    ``reconcile_tolerance_inr`` the maximum money difference two engines may disagree by.
+    """
+
+    # CPCV scheme the battery re-evaluates the strategy recipe under (k < N enforced below).
+    cpcv_groups: int = Field(default=6, ge=2)
+    cpcv_test_groups: int = Field(default=2, ge=1)
+    cpcv_embargo_pct: float = Field(default=0.01, ge=0, lt=1)
+    # Parameter sensitivity: knife-edge if the variant medians' coefficient of variation exceeds it.
+    knife_edge_cv_threshold: float = Field(default=1.0, gt=0)
+    # Noise injection: relative feature-std noise levels + the repeats averaged at each level.
+    noise_levels: tuple[float, ...] = Field(default=(0.05, 0.1, 0.25, 0.5), min_length=1)
+    noise_repeats: int = Field(default=3, ge=1)
+    # Monte Carlo trade-order shuffles (the equity-path-shape resampling).
+    monte_carlo_shuffles: int = Field(default=1000, ge=1)
+    # Synthetic-data backtest: no-signal universes, sessions each, and the spurious-edge flag.
+    synthetic_universes: int = Field(default=8, ge=1)
+    synthetic_sessions: int = Field(default=60, ge=1)
+    synthetic_edge_threshold: float = Field(default=0.5, gt=0)
+    # Two-engine reconciliation: maximum acceptable absolute money difference (INR).
+    reconcile_tolerance_inr: float = Field(default=1e-6, gt=0)
+    # Reproducibility (Ground Rule 7: seed every RNG the battery uses).
+    random_seed: int = Field(default=7, ge=0)
+
+    @field_validator("noise_levels")
+    @classmethod
+    def _non_negative_levels(cls, value: tuple[float, ...]) -> tuple[float, ...]:
+        """Noise levels are relative magnitudes, so each must be non-negative."""
+        if any(level < 0.0 for level in value):
+            raise ValueError(f"robustness.noise_levels must all be non-negative, got {value}")
+        return value
+
+    @model_validator(mode="after")
+    def _check_cpcv(self) -> "RobustnessConfig":
+        """The CPCV test-group count must be a strict subset of the groups (1 <= k < N)."""
+        if self.cpcv_test_groups >= self.cpcv_groups:
+            raise ValueError("robustness.cpcv_test_groups must be < robustness.cpcv_groups")
+        return self
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -417,6 +465,8 @@ class Config(_Section):
     # Defaulted: every field of PipelineConfig has a default, so a config without a
     # ``pipeline:`` section still validates; default.yaml documents it for discoverability.
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
+    # Defaulted likewise: the P2.8 robustness battery's knobs (default.yaml documents them).
+    robustness: RobustnessConfig = Field(default_factory=RobustnessConfig)
     logging: LoggingConfig
 
 
