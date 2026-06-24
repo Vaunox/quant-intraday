@@ -29,12 +29,7 @@ from quant.core.config import Config, ModelConfig
 from quant.core.interfaces import Repository
 from quant.core.logging import get_logger
 from quant.research.models.ensemble import EnsembleModel, EnsembleResult, EnsembleTrainer
-from quant.research.models.estimators import (
-    Estimator,
-    LightGBMEstimator,
-    LogisticEstimator,
-    XGBoostEstimator,
-)
+from quant.research.models.estimators import Estimator, cross_family_estimators
 from quant.research.models.evaluation import probability_to_position
 from quant.research.models.regime import RegimeGate, fit_regime_gate
 from quant.research.models.registry import ModelCard, ModelRegistry
@@ -219,12 +214,8 @@ def _fit_gate(config: Config, pooled: PooledDataset, model: EnsembleModel) -> Re
 
 
 def _build_estimators(config: ModelConfig) -> tuple[Estimator, ...]:
-    """The §4.1 cross-family stack: LightGBM + XGBoost + a hand-rolled logistic (diversity)."""
-    return (
-        LightGBMEstimator.from_config(config),
-        XGBoostEstimator.from_config(config),
-        LogisticEstimator(),
-    )
+    """The §4.1 cross-family stack (shared with the P2.8 battery via the estimators module)."""
+    return cross_family_estimators(config)
 
 
 def _registry_params(config: Config, pooled: PooledDataset, gate: RegimeGate) -> dict[str, object]:

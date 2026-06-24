@@ -44,3 +44,20 @@ class PBOError(ValidationError):
     For example an odd number of CSCV partitions, fewer rows than partitions, or a
     performance matrix with fewer than two candidate strategies.
     """
+
+
+class RobustnessError(ValidationError):
+    """A robustness-battery input is malformed (P2.8).
+
+    For example a misaligned :class:`~quant.research.validation.robustness.StrategyDataset`,
+    an empty parameter-variation grid, a noise level outside ``[0, ...)``, or a cross-symbol
+    request with too few symbols to hold one out.
+    """
+
+
+class ReconciliationError(ValidationError):
+    """A two-engine reconciliation input is malformed (P2.8).
+
+    For example a non-positive tolerance, or two engines whose equity curves are indexed
+    on different bars (so the per-bar difference is undefined).
+    """
