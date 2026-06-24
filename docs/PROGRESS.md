@@ -46,8 +46,8 @@ Updated at the end of every session.
 | 2026-06-21 | P2.4 Sample weighting | ☑ done | `feat/p2.4-sample-weighting` | 36 new (688 total) | `research/labeling/`: `SampleWeights` (indicator matrix → concurrency, average-uniqueness, return-attribution) + `time_decay_weights`; uniqueness-aware `sequential_bootstrap` (+ `average_uniqueness_of_sample` diagnostic, seeded RNG). Corrects non-IID overlapping labels (AFML ch. 4). 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.5 Meta-labeling + fractional differentiation | ☑ done | `feat/p2.5-meta-fracdiff` | 40 new (728 total) | `research/labeling/`: `momentum_side`/`mean_reversion_side` primary rules + `MetaLabeler` (side-aware bet/no-bet via a shared `barriers.first_touch`); `research/features_research/`: `frac_diff` (binomial FFD) + `adf_test` (statsmodels) + `min_ffd` (min-d stationary, retains memory). Added `statsmodels` dep (resolves with pandas 3.x). 100% cov on new modules. See notes. |
 | 2026-06-21 | P2.6 Model: baseline + tracking + calibration | ☑ done | `feat/p2.6-model-baseline` | 58 new (786 total) | `research/models/`: LightGBM baseline (native API) evaluated only under purged CV (pooled OOS predictions); permutation/MDA importance computed within the CV (not MDI); isotonic probability calibration (hand-rolled PAVA, no sklearn); purged-CV `HyperparameterTuner`; `ExperimentTracker` (in-memory default + lazy, confined `MLflowExperimentTracker` — operator-installed, pandas<3). `LightGBMBaseline` implements the live `Model`. Added `lightgbm`; mlflow not a declared dep. 100% cov on new modules. See notes. |
-| | P2.7 Ensemble + regime gate + registry | ☐ todo | | | |
-| | P2.8 Robustness battery + two-engine reconciliation | ☐ todo | | | |
+| 2026-06-22 | P2.7 Ensemble + regime gate + registry | ☑ done | `feat/p2.7-ensemble-regime-registry` | 98 new (884 total) | `research/models/`: cross-family ensemble (LightGBM+XGBoost+logistic; rank-average/stack, OOF combiner+calibrator), GMM regime gate, `FileModelRegistry` (data/feature/label/model version tags + fingerprint), `evaluate_ensemble_under_cpcv`. Added `xgboost`. **Final registry-promotable run on real data was deferred to P2A.6 — now done** (run `e24c0cd6…`, artifact `ensemble-regime-v1-0001`). 100% cov on new modules. See notes. |
+| | P2.8 Robustness battery + two-engine reconciliation | ☐ todo (unblocked: real artifact ready) | | | |
 | | P2.9 Validation report + kill-gate emitter | ☐ todo | | | |
 | | **GATE 2 — THE KILL-GATE** | ☐ | | | Tag `gate-2-research`. |
 
@@ -1516,16 +1516,16 @@ artifact via the fingerprint.
   trivial fake model. The fingerprint is integrity, the version tags are the §4 contract.
 
 **Follow-ups / notes (deferred, tracked)**
-- ⚠️ **Persistent MLflow tracking + final cloud run — OPERATOR ACTION (P2.7 tracking note).**
-  This session delivers and unit-tests the *code*, which fully supports persistent tracking via
-  the existing `ExperimentTracker` seam (`EnsembleTrainer.train(tracker=...)` +
-  `create_mlflow_tracker`) — tests use the in-memory tracker, the codebase convention. The
-  **final** P2.7 run — training the stack on the real backfilled, labeled dataset to produce the
-  registry artifacts that feed P2.9's kill-gate — is the operator's to execute under Part II's
-  research-env + MLflow runbook and cloud policy (final runs are operator-driven; Claude must
-  not hold broker credentials or fabricate run-IDs). Record the MLflow experiment/run-IDs here
-  when that run is performed. The code path is ready; only the tracked execution on real data
-  remains, and it must not silently fall back to the in-memory tracker.
+- ✅ **Persistent MLflow tracking + final run — DONE in P2A.6 (deferral closed 2026-06-24).**
+  P2.7 delivered and unit-tested the *code* (the `ExperimentTracker` seam +
+  `create_mlflow_tracker`). The **final** registry-promotable run on the real backfilled,
+  labeled dataset was executed in **P2A.6** (local, per the cloud policy): the
+  `quant.research.pipeline` orchestration pooled the 8-symbol universe (14,150 events) and
+  trained the ensemble + GMM regime gate, logged to **persistent MLflow** (experiment
+  `p2a6-final-run`, run-ID `e24c0cd6354f40e7bae024ce9f6b16c1`, status FINISHED — *not* the
+  in-memory tracker) and registered as **`ensemble-regime-v1-0001`** in `FileModelRegistry`
+  (round-trip exact). That artifact is the input P2.8 will validate. See the P2A.6 section below
+  and `docs/operator_runbooks/P2A.6_final_run.md`.
 - **Meta-model (§4.1 Step 5) → its natural home is the existing P2.5 `MetaLabeler` + this
   ensemble as the primary**; wiring the bet/no-bet meta-model on top of the gated ensemble lands
   with the kill-gate report assembly (P2.9), alongside the DSR honest trial count.
@@ -1730,3 +1730,81 @@ policy name); no credentials.
 is never used (public subnet + EIP per the cloud policy).
 
 **Next subtask: P2A.6 — Final P2.7 registry-promotable run on real data (local).**
+
+### 2026-06-24 — P2A.6 Final P2.7 registry-promotable run on real data ☑
+
+**Goal:** retroactively complete the deferred final P2.7 run now that real data exists — train the
+production stack (cross-family **ensemble** + **GMM regime gate**) on the real backfilled universe,
+log it to **persistent MLflow**, and write the artifact + model card into `FileModelRegistry`,
+ready for P2.8/P2.9. Runbook: `docs/operator_runbooks/P2A.6_final_run.md`.
+
+**Reference (Ground Rule 9):** Deep Dive #2 §4.1 (the cross-sectional ensemble + regime gate),
+§4 output contract (every artifact tagged with its data/feature/label/model versions → the
+registry), Inviolable Rule 2 (point-in-time: purged CV, OOF combiner/calibrator, train-only gate
+selection), Part II research-env/MLflow runbook + cloud policy (final P2.7 runs **local**).
+
+**Design decision — cross-sectional pooling (operator-approved Option 1, Ground Rule 9).** The
+blueprint's model is cross-sectional (one model across the universe), but `PurgedKFold` needs a
+**sorted, unique** timeline and the 8 symbols share 15-min timestamps. The pipeline pools all
+symbols onto **one synthetic timeline**, concatenating each symbol's events with an inter-symbol
+gap **strictly larger than the max label horizon** (`pipeline.pool_gap_days=5`; the vertical
+barrier caps a label at one session). Intra-symbol time deltas are preserved exactly (purge/embargo
+stay correct) and a label window can never span two symbols (asserted in the tests). Uses the
+merged P2.7 `EnsembleTrainer` unmodified. Options 2/3 (single-symbol / per-symbol-pick-best) were
+rejected: they break the cross-sectional architecture and (Option 3) inflate the P2.9 trial count.
+
+**Delivered (`src/quant/research/pipeline/`, orchestration only — no model maths):**
+- `dataset.py` — `resample_bars` (minute → 15-min, session-safe), `build_symbol_dataset`
+  (P1.6 core features + P1.7 regime descriptors → CUSUM events → triple-barrier labels →
+  average-uniqueness × time-decay weights), `pool_datasets` (the gapped synthetic timeline +
+  `PoolSegment` audit), `build_pooled_dataset`, deterministic `data_version`/`label_version`.
+- `model.py` — `GatedEnsembleModel` (the registry artifact: `EnsembleModel` + `RegimeGate`,
+  picklable, satisfies the live `Model` contract; `gated_position` applies the regime gate).
+- `final_run.py` — `train_final_model`: pool → `EnsembleTrainer.train` (MLflow-logged) → fit the
+  regime gate on full-sample strategy returns → register → **round-trip verify** (reloaded
+  artifact predicts identically, else exit 1).
+- `cli.py` + `scripts/run_final_training.py` — one narrated command; `--tracker mlflow` default
+  (selecting it without mlflow fails loudly — no silent in-memory fallback, a P2.9 correctness
+  requirement). None of the pipeline imports lightgbm/xgboost/mlflow directly (confinement test).
+- `core/config.py` + `config/default.yaml` — a `pipeline` config section (`pool_gap_days`,
+  `n_regimes`, `ensemble_method`, `registry_model_version`, `registry_dir`); gap is config, not a
+  literal (Ground Rule 2).
+- `.venv-research` gained the project + model stack (`uv pip install -e .`; LightGBM/XGBoost/
+  TA-Lib/statsmodels) — the install deferred from P2A.4; pandas stays 2.3.3.
+
+**Executed (AI, local, persistent MLflow → sqlite):** full backfill `2021-06-24 → 2026-06-23`,
+default 8-symbol universe. **Exit 0, round-trip exact** (≈2 min wall-clock):
+
+| item | value |
+|---|---|
+| MLflow | experiment `p2a6-final-run` (id **2**), run-ID **`e24c0cd6354f40e7bae024ce9f6b16c1`**, status **FINISHED** |
+| registry artifact | **`ensemble-regime-v1-0001`** (`models/registry/ensemble-regime-v1/0001/`; fingerprint `9031451e…`) |
+| data / feature / label versions | `15min-8sym-20210624-20260623-1bba6975` / `core-v1` / `tb-cusum0.01-u2.0-d1.5-min0.002-vmax0` |
+| pooled observations | **14,150** events across all 8 symbols (positive rate 0.450) |
+| members / gate | `lightgbm, xgboost, logistic` (rank-average, isotonic) / 3 regimes, multipliers `(1,1,1)` |
+| OOS (purged CV) | combined AUC 0.520 (lgbm 0.529 / xgb 0.527 / logistic 0.488); calibrated logloss 0.687, Brier 0.247 |
+
+**Done-when:** ☑ MLflow run-ID exists (FINISHED); ☑ `FileModelRegistry` artifact exists; ☑ both
+recorded here + under P2.7 (deferral closed above); ☑ reloaded artifact deserializes + predicts
+identically (independently re-verified in a fresh process, fingerprint checked); ☑ artifact is the
+input P2.8 will validate.
+
+**Verification (all green, engine env, Py 3.12):** ruff, black, mypy strict (210 files);
+**947 tests pass (36 new), 1 skipped** (POSIX-only); **100% coverage** on all new pipeline modules.
+
+**Honesty note (Inviolable Rule 7).** The edge is **weak** — combined OOS AUC ≈ 0.52, barely above
+chance on this 8-name seed universe. That is the expected reality, not a failure: P2A.6's job is to
+produce the registry-promotable artifact; whether it survives **costs + the seven-point kill-gate**
+is P2.8 (robustness) and P2.9's (DSR/PBO/CPCV) verdict, not this run's.
+
+**Follow-ups / notes (deferred, tracked):**
+- **Universe expansion to survivorship-correct Nifty-50/100** (already tracked in P2A.3) remains
+  the right next data step before P2.8 leans on this artifact's generality.
+- **"Features from finer data" (Part II locked decision).** This run computes features on the
+  resampled 15-min bars; pulling minute-level microstructure (OFI/depth, P1.7) into the 15-min
+  decision rows is a tracked refinement, not built here (Ground Rule 4) — the depth book isn't in
+  the minute archive yet.
+- **P2A gate (`gate-2a-real-data-path`) is ready to tag:** Kite creds + daily auth + real data +
+  research env + AWS prep + the final P2.7 artifact all exist. Tagging is the operator's call.
+
+**Next subtask: P2.8 — Robustness battery + two-engine reconciliation (against this artifact).**

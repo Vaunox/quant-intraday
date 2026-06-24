@@ -191,6 +191,32 @@ def test_labeling_rejects_non_positive_threshold() -> None:
         load_config(environ={"QUANT__labeling__cusum_threshold": "0"})  # must be > 0
 
 
+# --- pipeline (P2A.6 final-run) ----------------------------------------------
+
+
+def test_pipeline_config_loads() -> None:
+    pipeline = load_config(environ={}).pipeline
+    assert pipeline.pool_gap_days == 5
+    assert pipeline.n_regimes == 3
+    assert pipeline.ensemble_method == "rank_average"
+    assert pipeline.registry_model_version == "ensemble-regime-v1"
+    assert pipeline.registry_dir == "models/registry"
+
+
+def test_pipeline_rejects_non_positive_gap() -> None:
+    with pytest.raises(ConfigError):
+        load_config(environ={"QUANT__pipeline__pool_gap_days": "0"})  # must be > 0
+
+
+def test_pipeline_section_is_optional_and_defaults() -> None:
+    # A config tree without a `pipeline:` section still validates (default_factory), so the
+    # section is documentation/override-only, never a hard requirement.
+    payload = load_config(environ={}).model_dump()
+    del payload["pipeline"]
+    rebuilt = Config.model_validate(payload)
+    assert rebuilt.pipeline.pool_gap_days == 5
+
+
 # --- layered merge (default <- env file) -------------------------------------
 
 

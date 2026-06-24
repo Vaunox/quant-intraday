@@ -360,6 +360,32 @@ class ModelConfig(_Section):
     model_version: str
 
 
+class PipelineConfig(_Section):
+    """Research training-pipeline parameters (Layer 2 final run, P2A.6).
+
+    The pipeline assembles the real backfilled bars into the pooled training matrix and trains
+    the registry-promotable ensemble + regime-gate artifact. Its one subtle knob is
+    ``pool_gap_days``: the cross-sectional pool concatenates each symbol's events onto a single
+    synthetic timeline (so the one model trains on the whole universe), separated by a gap
+    **strictly larger than the maximum triple-barrier label horizon** — with a session-bounded
+    vertical barrier that horizon is at most one trading session, so a multi-day gap guarantees
+    no label window can ever span two symbols and the purge/embargo of
+    :class:`~quant.research.validation.splits.PurgedKFold` stays correct. It is config, not a
+    literal (Ground Rule 2), so the margin is tunable without a code change.
+    """
+
+    # Cross-symbol pool gap, in calendar days. Must exceed the max label horizon (one session).
+    pool_gap_days: int = Field(default=5, gt=0)
+    # GMM regimes for the regime gate (a small k; trending / ranging / high-vol — §4.1).
+    n_regimes: int = Field(default=3, gt=0)
+    # Ensemble blend mode (rank-averaging is the §4.1 default; stacking is the alternative).
+    ensemble_method: Literal["rank_average", "stack"] = "rank_average"
+    # Registry key the final ensemble + regime-gate artifact is versioned under (§4 contract).
+    registry_model_version: str = "ensemble-regime-v1"
+    # Where FileModelRegistry writes (a gitignored runtime cache, like data/; Ground Rule 6).
+    registry_dir: str = "models/registry"
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -388,6 +414,9 @@ class Config(_Section):
     hygiene: HygieneConfig
     features: FeaturesConfig
     model: ModelConfig
+    # Defaulted: every field of PipelineConfig has a default, so a config without a
+    # ``pipeline:`` section still validates; default.yaml documents it for discoverability.
+    pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     logging: LoggingConfig
 
 

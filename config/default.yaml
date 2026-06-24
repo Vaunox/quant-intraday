@@ -167,6 +167,15 @@ model:
   random_seed: 7                  # seed every RNG (reproducibility)
   model_version: baseline-v1      # tags every tracked run/artifact
 
+pipeline:
+  # Research training pipeline (P2A.6): assembles real bars -> pooled training matrix ->
+  # registry-promotable ensemble + regime-gate artifact.
+  pool_gap_days: 5                # cross-symbol pool gap; must exceed the max label horizon
+  n_regimes: 3                    # GMM regimes for the regime gate (trending/ranging/high-vol)
+  ensemble_method: rank_average   # rank_average | stack (cross-family blend, §4.1)
+  registry_model_version: ensemble-regime-v1  # registry key for the final artifact (§4 contract)
+  registry_dir: "models/registry" # FileModelRegistry root (gitignored runtime cache)
+
 logging:
   level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL
   format: json                    # json | text
