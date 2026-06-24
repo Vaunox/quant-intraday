@@ -1700,3 +1700,33 @@ durable store. Runbook: `docs/operator_runbooks/P2A.4_research_env.md`.
 **P2A.6**'s setup, when the final P2.7 run actually executes in this env (P2A.4 proves MLflow only).
 
 **Next subtask: P2A.5 — AWS account preparation (one-time; no resources launched).**
+
+### 2026-06-24 — P2A.5 AWS account preparation ☑
+
+**Goal:** an AWS account prepared (hygiene + guardrails) for the P2.8 cloud run and the Phase-8
+engine VPS — with **zero resources launched**. Account hygiene only. Runbook:
+`docs/operator_runbooks/P2A.5_aws_setup.md`.
+
+**Operator actions (completed, existing account, account-ID tail …9719):** root MFA on + no root
+access keys; **$150 promotional credits** present (≈$50 already used of the $200 grant); created
+IAM user **`quant-intraday-ops`** (console + programmatic) with **MFA**; attached the
+least-privilege customer-managed policy **`quant-intraday-ops-policy`** (spot EC2 + project S3 +
+CloudWatch, **`ap-south-1`-only**, with an explicit out-of-region deny); AWS **Budgets** cost
+alerts at 50/80/100% of a $25/mo tripwire; installed AWS CLI 2.35.11 and `aws configure` (key in
+`~/.aws/`, never the repo).
+
+**Verified (AI, on the dev box):** `aws sts get-caller-identity` → the IAM user ARN (auth works,
+not root); `ec2 describe-instances --region us-east-1` → **explicit deny** (least-privilege
+proven); `--region ap-south-1` → allowed and **empty** (`Reservations: []` — nothing launched).
+
+**Delivered:** `aws/config.yaml` — non-secret identifiers only (region, account ID, IAM ARN,
+policy name); no credentials.
+
+**Done-when:** ☑ IAM auth works; ☑ least-privilege (out-of-region denied); ☑ Budgets armed;
+☑ credits visible; ☑ MFA on root + IAM user; ☑ recorded (date + account-ID-tail, no keys);
+☑ no EC2/S3/NAT/EIP created.
+
+**Note:** S3 bucket + first spot run are **P2.8**; engine VPS + EIP are **P5A.1 / Phase 8**; NAT
+is never used (public subnet + EIP per the cloud policy).
+
+**Next subtask: P2A.6 — Final P2.7 registry-promotable run on real data (local).**
