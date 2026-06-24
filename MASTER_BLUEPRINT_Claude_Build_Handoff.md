@@ -288,9 +288,11 @@ Before exiting this subsection, also ensure the repo's `.gitignore` covers `.ven
 ### Running MLflow tracking for a research run
 
 ```bash
-# Terminal A — start a local MLflow server bound to localhost only
-#   Windows: .venv-research\Scripts\mlflow.exe ui --host 127.0.0.1 --port 5000 --backend-store-uri ./mlruns
-#   Linux / macOS: .venv-research/bin/mlflow ui --host 127.0.0.1 --port 5000 --backend-store-uri ./mlruns
+# Terminal A — start a local MLflow server bound to localhost only.
+# NOTE (MLflow 3.x, verified 2026-06-24 in P2A.4): the file store (./mlruns) is deprecated and
+# `mlflow server` refuses it — use a sqlite backend. Keep the db + artifacts under mlruns/ (gitignored).
+#   Windows:       .venv-research\Scripts\mlflow.exe server --backend-store-uri "sqlite:///mlruns/mlflow.db" --default-artifact-root "./mlruns/mlartifacts" --host 127.0.0.1 --port 5000
+#   Linux / macOS: .venv-research/bin/mlflow     server --backend-store-uri "sqlite:///mlruns/mlflow.db" --default-artifact-root "./mlruns/mlartifacts" --host 127.0.0.1 --port 5000
 
 # Terminal B — activate the research env, then run training with the URI set
 #   (activate per the platform line above)
@@ -298,6 +300,7 @@ Before exiting this subsection, also ensure the repo's `.gitignore` covers `.ven
 export MLFLOW_TRACKING_URI=http://127.0.0.1:5000     # Linux / macOS
 $env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"    # Windows PowerShell
 set MLFLOW_TRACKING_URI=http://127.0.0.1:5000         # Windows cmd.exe
+$env:PYTHONUTF8 = "1"   # Windows only: MLflow prints a 🏃 emoji that crashes the cp1252 console without it
 
 python -m quant.research.<your_entry_point>
 ```
@@ -1241,7 +1244,7 @@ Phase 8 begins with the operator subphase P8A above; the engineering subtasks be
 | 2026-06-23 | P2A.1 | ☑ done | `feat/p2a.1-kite-credentials` | 5 new (verify) | Kite Connect app created & subscribed (₹500/mo incl. historical data); `api_key`/`api_secret` recorded only via the secrets interface (`QUANT_SECRET_KITE_*`), never git; read-only `verify_kite_credentials` passed (9,853 NSE instruments). Walkthrough `docs/operator_runbooks/P2A.1_kite_signup.md`. |
 | 2026-06-23 | P2A.2 | ☑ done | `feat/p2a.2-daily-auth` | 19 new (secrets+auth) | Daily manual-TOTP login → fresh `access_token` persisted to the secrets interface via a **file-backed store** (`~/.quant-intraday/secrets.json`, env-then-file precedence; repository-pattern parity with future AWS Secrets Manager); morning CLI helper `scripts/kite_morning_auth.py`. Live seed verified end-to-end (`POST /session/token → 200`, proving the `api_secret`; 32-char read-back). Runbook `docs/operator_runbooks/P2A.2_daily_auth.md`. |
 | 2026-06-24 | P2A.3 | ☑ done | `feat/p2a.3-backfill` | 7 new (token+verifier) | First real backfill: 8 seed large-caps, ~5y minute bars (2021-06-24 → 2026-06-23; ~462k bars/symbol, ~3.70M rows, 1,239 sessions) via P1.4 → Parquet; backfill reads the daily token from the secrets interface; `check_backfill` (P1.5 gaps + P1.9 dashboard) green — every symbol has data, 2 bad ticks removed. The 67 "missing days" = NSE holidays absent from the P0.4 calendar (tracked follow-up). Runbook `docs/operator_runbooks/P2A.3_backfill.md`. |
-| | P2A.4 | ☐ todo | | | Stand up `.venv-research` + persistent MLflow bound to 127.0.0.1, per Part II's research-env runbook. |
+| 2026-06-24 | P2A.4 | ☑ done | `feat/p2a.4-research-env` | (docs/config) | `.venv-research` stood up (pandas 2.3.3 + mlflow 3.14.0 + arcticdb 6.18.3); persistent MLflow on 127.0.0.1:5000 verified (smoke run persisted to sqlite `mlruns/mlflow.db`). Findings folded into the runbook + Part II: MLflow 3.x needs a sqlite backend (file store deprecated) and Windows needs `PYTHONUTF8=1`. `.venv-research/` gitignored + ruff-excluded. Runbook `docs/operator_runbooks/P2A.4_research_env.md`. |
 | | P2A.5 | ☐ todo | | | AWS account hygiene only — IAM user + MFA (root + user), Budgets (50/80/100%), $150 credits; no resources launched. Runbook `docs/operator_runbooks/P2A.5_aws_setup.md`. |
 | | P2A.6 | ☐ todo | | | Final registry-promotable P2.7 run on real data → MLflow run-ID + `FileModelRegistry` artifact (closes the P2.7 deferral); local. |
 | | … | | | | |

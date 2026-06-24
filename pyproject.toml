@@ -68,6 +68,9 @@ packages = ["src/quant"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
+# The separate research env (P2A.4) holds pandas<3 + mlflow + arcticdb; never lint its
+# dependencies. (mypy is already scoped to src/tests; .venv-research is gitignored too.)
+extend-exclude = [".venv-research"]
 
 [tool.ruff.lint]
 # A strong-but-practical rule set. Typing is enforced by mypy (strict), so we do

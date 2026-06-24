@@ -52,6 +52,7 @@ __pycache__/
 /dist/
 .venv/
 venv/
+.venv-research/   # separate research env (pandas<3 + mlflow + arcticdb); never committed (P2A.4)
 # (no bare "env/": it would match config/env/, the per-environment config dir)
 
 # Tool caches
