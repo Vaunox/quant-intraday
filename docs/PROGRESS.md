@@ -1629,7 +1629,7 @@ successful daily login end-to-end; recorded here (date only, no token value).
 
 **Next subtask: P2A.3 — Real-data backfill: first historical pull.**
 
-### 2026-06-24 — P2A.3 Real-data backfill: first historical pull ◐ in progress
+### 2026-06-24 — P2A.3 Real-data backfill: first historical pull ☑
 
 **Goal:** the first real historical dataset — ~5 years of minute bars for the seed universe, via
 the P1.4 backfill → Parquet, then checked with P1.5 gap detection + the P1.9 data-quality
@@ -1645,5 +1645,29 @@ is deferred to a follow-up subtask before P2.8. Requires sourcing point-in-time 
 constituents including delisted/renamed names per P1.5 hygiene. The current P2A.3 backfill uses
 the 8 seed large-caps from `config/universe.yaml`.
 
-*(Backfill execution + verification, and the row/session counts, are recorded here when the
-operator runs it; the Part V row flips to ☑ then.)*
+**Executed (operator, live):** `run_backfill.py` pulled all 8 names (reading today's token from
+the secrets interface — no `--request-token`); `check_backfill.py` verified the pull. Result —
+**every symbol has data** over **2021-06-24 09:15 → 2026-06-23 15:29** (the full requested range):
+
+| metric | value |
+|---|---|
+| symbols | 8 (all populated) |
+| minute bars | ~462k per symbol (~3.70M total; e.g. RELIANCE 462,436) |
+| sessions covered | 1,239 per symbol |
+| bad ticks removed | 2 total (across 8 names × ~5y) |
+| intraday gaps | 117 total (~15/symbol — micro-gaps, ~0.5% of minutes) |
+
+The first bar lands exactly on the requested start (2021-06-24), and 1,239 observed sessions ≈
+all real NSE trading days in the window — coverage is effectively complete.
+
+**Done-when:** ☑ Parquet store holds the 8-symbol minute universe over the configured period;
+☑ P1.5 gap detection run + reviewed (micro-gaps, within tolerance); ☑ P1.9 dashboard reports
+every symbol with data; ☑ dataset span + counts recorded here.
+
+**Follow-up (tracked):** the P1.9 check reports **expected = 1,300** sessions vs **1,239** observed
+and `missing_days = 67` (identical across all 8 names) — these are **NSE holidays absent from the
+P0.4 `NSECalendar` holiday set**, not missing data (the first bar is exactly 2021-06-24). Complete
+the holiday calendar (a P0.4 follow-up) before relying on session-level coverage / drift metrics;
+it would also clear the spurious "ISSUES" flags in the coverage report.
+
+**Next subtask: P2A.4 — Research environment stand-up (`.venv-research` + persistent MLflow).**
