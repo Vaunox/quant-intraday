@@ -1671,3 +1671,32 @@ the holiday calendar (a P0.4 follow-up) before relying on session-level coverage
 it would also clear the spurious "ISSUES" flags in the coverage report.
 
 **Next subtask: P2A.4 — Research environment stand-up (`.venv-research` + persistent MLflow).**
+
+### 2026-06-24 — P2A.4 Research environment stand-up ☑
+
+**Goal:** a separate `.venv-research` env (`pandas<3` + MLflow + ArcticDB) with a persistent MLflow
+tracking server, so the auto-trigger research runs (P2A.6 final P2.7, then P2.8/P2.9) record to a
+durable store. Runbook: `docs/operator_runbooks/P2A.4_research_env.md`.
+
+**Stood up & verified (on the dev box, via the AI's shell — pure local tooling, no credentials):**
+- `.venv-research` created (`uv venv --python 3.12`); installed **pandas 2.3.3 + mlflow 3.14.0 +
+  arcticdb 6.18.3** (arcticdb installs fine on Windows). Engine env untouched (stays pandas 3.x).
+- MLflow tracking server reachable at **http://127.0.0.1:5000**; a smoke run logged to the
+  `p2a4-smoke` experiment and **persisted** (sqlite `mlruns/mlflow.db`); server then stopped.
+- Config: `.gitignore` now ignores `.venv-research/` (`mlruns/` already ignored); ruff
+  `extend-exclude` adds `.venv-research` (mypy already scoped to `src`/`tests`).
+
+**Done-when:** ☑ `mlflow --version` in `.venv-research`; ☑ pandas 2.x there; ☑ UI reachable on
+127.0.0.1:5000; ☑ a test run appears + persists.
+
+**Findings (corrected in the runbook + Part II):**
+- **MLflow 3.x deprecated the file store** (`--backend-store-uri ./mlruns`) — `mlflow server` now
+  refuses it. Switched to a **sqlite** backend (`sqlite:///mlruns/mlflow.db` + `--default-artifact-root
+  ./mlruns/mlartifacts`), both under the gitignored `mlruns/`. Part II's runbook command updated.
+- **Windows needs `PYTHONUTF8=1`** for MLflow-logging scripts: MLflow prints a 🏃 emoji in the
+  run-URL line that crashes the default cp1252 console. Noted in the runbook + Part II.
+
+**Note:** installing the quant project + model stack (LightGBM/XGBoost) *into* `.venv-research` is
+**P2A.6**'s setup, when the final P2.7 run actually executes in this env (P2A.4 proves MLflow only).
+
+**Next subtask: P2A.5 — AWS account preparation (one-time; no resources launched).**
