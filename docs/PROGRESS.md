@@ -1628,3 +1628,22 @@ successful daily login end-to-end; recorded here (date only, no token value).
   **Phase 8**.
 
 **Next subtask: P2A.3 — Real-data backfill: first historical pull.**
+
+### 2026-06-24 — P2A.3 Real-data backfill: first historical pull ◐ in progress
+
+**Goal:** the first real historical dataset — ~5 years of minute bars for the seed universe, via
+the P1.4 backfill → Parquet, then checked with P1.5 gap detection + the P1.9 data-quality
+dashboard. Runbook authored: `docs/operator_runbooks/P2A.3_backfill.md`.
+
+**Parameters (set with the operator):** the 8 seed large-caps in `config/universe.yaml`; minute
+interval; 2021-06-24 → 2026-06-23 (~5 years); Parquet tier; the daily access token read from the
+secrets interface (`kite_access_token`, seeded by the P2A.2 helper) rather than a per-run
+`--request-token`.
+
+**Deferred follow-up (tracked):** universe expansion to a survivorship-correct **Nifty-50/100**
+is deferred to a follow-up subtask before P2.8. Requires sourcing point-in-time index
+constituents including delisted/renamed names per P1.5 hygiene. The current P2A.3 backfill uses
+the 8 seed large-caps from `config/universe.yaml`.
+
+*(Backfill execution + verification, and the row/session counts, are recorded here when the
+operator runs it; the Part V row flips to ☑ then.)*
