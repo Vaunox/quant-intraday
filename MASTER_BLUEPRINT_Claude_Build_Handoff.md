@@ -174,7 +174,7 @@ Comprehensive, structured, useful logging across the whole system.
 
 These are domain safety rules. They override convenience and "just make it work."
 
-1. **The kill-gate is sacred.** No strategy receives capital — not even paper-to-live promotion — without passing **all seven** kill-gate criteria (Part III, Layer 2). No tweaking-until-it-passes; that is overfitting and inflates the trial count the Deflated Sharpe will punish. Most ideas should die here. That is success, not failure.
+1. **The kill-gate is sacred.** No strategy receives capital — not even paper-to-live promotion — without passing **all seven** kill-gate criteria (Part III, Layer 2). No tweaking-until-it-passes; that is overfitting and inflates the trial count the Deflated Sharpe will punish. Most ideas should die here. That is success, not failure. A failed kill-gate is not a project failure — it is a routing signal. A failed kill-gate diverts the build into Phase 2R (research iteration loop), not forward into Phase 3. The agent must never proceed from a failing P2.9 verdict into Phase 3 work. Phase 3 (Capital Layer) and beyond are gated on a passing P2.9 — not on having merely completed P2.9. Treat "P2.9 emits a kill verdict" as a fork in the road, not a milestone behind you.
 2. **Point-in-time correctness, always.** No feature may use data unavailable at decision time. Decisions on bar *t*'s close execute at bar *t+1*'s open — identically in backtest and live. All normalization uses trailing/expanding windows only. Leakage tests run in CI.
 3. **Hard risk limits sit above every model.** The risk-limit engine (per-trade stop, daily-loss halt, drawdown circuit breaker, exposure caps, kill-switch) can veto or flatten anything and cannot be overridden by a model or by a human mid-session. The kill-switch must always work and is tested.
 4. **Costs are always modeled.** No gross-only backtests. The full Indian cost model (brokerage, STT, exchange charges, GST, stamp duty) plus realistic slippage applies to every simulation.
@@ -846,7 +846,52 @@ This subphase exists because the project has reached the transition from synthet
 
 ---
 
+## PHASE 2R — Research Iteration Loop
+
+This subphase exists because most candidate strategies will fail the kill-gate (Inviolable Rule 7), and the path forward from a failing P2.9 verdict is iteration on inputs, not progression to Phase 3. Phase 2R is a loop, not a sequential phase: a candidate enters at P2R.1, exits either back to P2.9 (with new inputs, re-validated) or out of the project (a deliberate stop). Phase 3 is unreachable until P2.9 emits a passing verdict.
+
+**Operating principle:** iteration is hypothesis-driven, not tweak-driven. Each cycle changes one input family with a stated reason grounded in the deep dives, the candidate is re-validated under the same honest harness, and the result is logged. Deflated Sharpe Ratio in P2.9 punishes blind search — every trial counts toward the trial budget, even the ones discarded silently. So iteration discipline is correctness, not aesthetics.
+
+**Gating:** Phase 3 (Capital Layer) is reachable only when P2.9 emits a passing verdict (all seven kill-gate criteria green) on a candidate that has been through Phase 2R at least once or passed P2.9 on first attempt. The "passed on first attempt" outcome is statistically unlikely and should be inspected for leakage before being trusted.
+
+#### P2R.1 — Diagnostic: where is the binding constraint?
+- **Goal:** a written, evidence-grounded assessment of why the current candidate failed P2.9, ranking the most likely binding constraints from a fixed list.
+- **Depends on:** P2.9 emitting a kill verdict on the current candidate.
+- **Deliverable:** `docs/iteration_log/<cycle-N>_diagnostic.md` containing a ranked assessment of: (a) feature signal strength (especially missing OFI / microstructure from Layer 1 §2.2), (b) triple-barrier upper/lower/vertical calibration vs realized intraday volatility, (c) universe size and survivorship coverage, (d) decision frequency, (e) sample weighting / labeling discipline, (f) model capacity, (g) something else. Each candidate cites the deep-dive sections that inform it and the diagnostic evidence (AUC, Brier, path-Sharpe, feature importances, fold-by-fold metrics) that points to it being binding.
+- **Done when:** the diagnostic exists, the top one or two candidates are explicitly recommended for the next iteration cycle, and the diagnostic is reviewed by the operator before any code changes are made.
+- **Reference:** Inviolable Rule 7; Layer 1 §2.2; Layer 2 throughout.
+
+#### P2R.2 — Hypothesis-driven iteration: change one input family
+- **Goal:** modify one input family — features, labels, universe, frequency, or sample weighting — per the diagnostic's recommendation, and re-validate.
+- **Depends on:** P2R.1.
+- **Operator action required:** approve the chosen input change before code is written (this prevents tweak-spiral).
+- **Deliverable:** the focused change to the relevant Layer-1 or Layer-2 module under a `feat/iteration-<cycle-N>-<input-family>` branch, accompanied by an updated entry in `docs/iteration_log/<cycle-N>_changelog.md` describing the change, the hypothesis, and the expected effect.
+- **Done when:** the change is merged behind the same engineering ground rules as any other subtask (CI green, tests cover the new code path, etc.), and the iteration log entry is complete.
+- **Important guardrails:**
+  - One input family per cycle. Changing features and labels and universe at once destroys causality — you can't tell what helped.
+  - Local execution per the cloud-compute policy. Iterative re-runs stay on the operator's machine; cloud is for the final-run-after-smoke-passes only.
+  - Every variant tried is logged to MLflow (the persistent research env), so the Deflated Sharpe trial count remains honest for the eventual passing-verdict run. Including variants that were quickly discarded. The penalty for cheating on trial count is invisible until P2.9 reports a deflated number that doesn't match expectations.
+- **Reference:** Cloud-compute policy "Iteration discipline" subsection; Layer 2 §4b.
+
+#### P2R.3 — Re-run P2.9 against the iterated candidate
+- **Goal:** the same kill-gate report emitted against the iterated candidate.
+- **Depends on:** P2R.2.
+- **Deliverable:** a re-run of P2.9's report; outcome appended to `docs/iteration_log/<cycle-N>_verdict.md`.
+- **Done when:** the report exists and the verdict is one of: PASS (route to Phase 3), CONTINUE (route back to P2R.1 with the next cycle number), or STOP (operator decision: enough cycles without sufficient progress; the project either pivots or ends — see P2R.4).
+
+#### P2R.4 — Iteration budget and stop discipline (operator-only)
+- **Goal:** prevent the iteration loop from becoming infinite or degenerating into overfitting.
+- **Deliverable:** a written iteration budget in `docs/iteration_log/budget.md`, set by the operator before P2R.1 of cycle 1, stating: (a) maximum number of cycles before a hard reassessment, (b) maximum cumulative MLflow trial count before Deflated Sharpe becomes punitive enough that no realistic raw Sharpe can clear it, and (c) the operator's pre-committed pivot/stop criteria (e.g., "if after N cycles smoke path-Sharpe has not exceeded 0.3, the project pivots to a different decision frequency or stops entirely").
+- **Done when:** the budget is committed to git before iteration begins, and is consulted at the end of each cycle.
+- **Important:** this is an operator decision, not an agent decision. The agent surfaces the trial count and cycle count; the operator decides whether to continue. Stopping a project that is honestly not converging is the disciplined choice (Layer 5 §8.9, kill criteria) and is genuinely a successful outcome — you have built a reusable research apparatus and avoided losing money.
+
+Phase 2R is a loop, not a phase with a single gate. The exit condition is a passing P2.9 verdict (route to Phase 3) or an operator-decided stop/pivot (P2R.4). The blueprint does not auto-advance past a failing P2.9. Tag each cycle's exit as `iteration-cycle-N-{pass|continue|stop}`.
+
+---
+
 ## PHASE 3 — Capital Layer
+
+**Phase 3 prerequisite (re-checked at every session start in this phase):** the most recent P2.9 verdict in `docs/iteration_log/` must be PASS. If the most recent verdict is CONTINUE or no PASS verdict exists, the agent must route to Phase 2R, not proceed with Phase 3 work. This is enforced as a session-start check, per Ground Rule 9.
 
 #### P3.1 — Risk-limit engine (first)
 - **Goal:** the un-overridable safety harness.
@@ -1258,7 +1303,7 @@ Phase 8 begins with the operator subphase P8A above; the engineering subtasks be
 | | P8A.2 | ☐ todo | | | Fund the live account (~₹40k validation capital); kill-criteria pre-committed. Runbook `docs/operator_runbooks/P8A.2_funding.md`. |
 | | P8A.3 | ☐ todo | | | First live week — daily operator-authorized micro-live, panic-flatten ready; 5 clean days → sign off (or pause). Runbook `docs/operator_runbooks/P8A.3_first_week.md`. |
 
-**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
+**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 2R (loop — no single gate; tracked per-cycle in iteration_log) ◯ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
 
 ---
 
