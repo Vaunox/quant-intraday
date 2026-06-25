@@ -191,6 +191,19 @@ robustness:
   reconcile_tolerance_inr: 0.000001  # max money difference two engines may disagree by (INR)
   random_seed: 7                  # seed every RNG the battery uses (reproducibility)
 
+kill_gate:
+  # The seven-point kill-gate (P2.9, Deep Dive #2). Thresholds set BEFORE running (Rule 1);
+  # a candidate proceeds toward capital only if it clears ALL seven on cost-inclusive data.
+  cpcv_median_sharpe_min: 1.0     # (1) annualised CPCV median path-Sharpe, after costs
+  dsr_min: 0.95                   # (2) Deflated Sharpe Ratio (probability) >= this
+  pbo_max: 0.2                    # (3) Probability of Backtest Overfitting <= this
+  max_fraction_negative_paths: 0.05  # (4) at most this fraction of CPCV paths negative
+  min_path_sharpe: -0.5           # (4) worst annualised path-Sharpe floor (no fragile path)
+  min_profit_factor: 1.2          # (5) gross profit / gross loss >= this
+  max_trade_concentration: 0.5    # (5) no single trade > this fraction of gross profit
+  min_regime_mean_return: 0.0     # (7) every observed regime's mean net return >= this
+  regime_min_observations: 20     # (7) a regime needs >= this many obs to be judged
+
 logging:
   level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL
   format: json                    # json | text
