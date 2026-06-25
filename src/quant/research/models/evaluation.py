@@ -78,6 +78,7 @@ def evaluate_ensemble_under_cpcv(
     meta_l2: float = 1.0,
     sample_weight: pd.Series | None = None,
     periods_per_year: float | None = None,
+    round_trip_cost: float = 0.0,
     random_seed: int = 7,
 ) -> CPCVEvaluation:
     """Evaluate the ensemble (optionally regime-gated) under CPCV; return the path distribution.
@@ -97,6 +98,12 @@ def evaluate_ensemble_under_cpcv(
         meta_l2: L2 penalty for the stacking meta-learner (ignored for rank averaging).
         sample_weight: Optional per-event training weights (P2.4).
         periods_per_year: If given, the path Sharpes are annualized by ``√periods_per_year``.
+        round_trip_cost: A round-trip transaction cost, as a fraction of notional, charged once
+            per event (enter at ``t0``, exit at the barrier) scaled by the position size taken.
+            ``0.0`` (default) leaves the returns **gross** — the P2.7/P2.8 behaviour; the P2.9
+            kill-gate passes the representative Indian round-trip cost so criterion 1 is *"after
+            costs"*. The gate's per-regime train selection is netted on the same basis (no
+            lookahead).
         random_seed: Seed for the regime GMM (the ensemble members carry their own seeds).
 
     Returns:
@@ -122,12 +129,12 @@ def evaluate_ensemble_under_cpcv(
         )
         position = probability_to_position(model.predict_proba(features.iloc[test]))
         if regime_features is not None:
-            # Gate on the *strategy's* per-regime edge measured on the train slice (does the
-            # signal make money in this regime?) — not the market's raw drift. Train-only, so
-            # no lookahead: build the train positions from the same fitted model.
+            # Gate on the *strategy's* per-regime **net** edge measured on the train slice (does
+            # the signal make money after costs in this regime?) — not the market's raw drift.
+            # Train-only, so no lookahead: build the train positions from the same fitted model.
+            train_position = probability_to_position(model.predict_proba(features.iloc[train]))
             train_strategy_return = (
-                probability_to_position(model.predict_proba(features.iloc[train]))
-                * returns_array[train]
+                train_position * returns_array[train] - np.abs(train_position) * round_trip_cost
             )
             position = _apply_regime_gate(
                 position,
@@ -138,7 +145,7 @@ def evaluate_ensemble_under_cpcv(
                 n_regimes,
                 random_seed,
             )
-        test_returns = position * returns_array[test]
+        test_returns = position * returns_array[test] - np.abs(position) * round_trip_cost
         return pd.Series(test_returns, index=features.index[test])
 
     paths, distribution = cpcv.run(label_times, backtest_fn, periods_per_year=periods_per_year)

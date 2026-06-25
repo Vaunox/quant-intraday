@@ -159,3 +159,17 @@ def test_evaluation_rejects_misaligned_regime_features() -> None:
         evaluate_ensemble_under_cpcv(
             _estimators(), features, labels, label_times, fwd, cpcv, regime_features=bad_regime
         )
+
+
+def test_round_trip_cost_lowers_the_path_distribution() -> None:
+    # Charging a per-event round-trip cost nets the returns down — the P2.9 "after costs" basis.
+    features, labels, label_times, _, _ = _dataset()
+    fwd = _noisy_directional_returns(labels)
+    cpcv = CombinatorialPurgedCV(6, 2, embargo_pct=0.0)
+    gross = evaluate_ensemble_under_cpcv(
+        _estimators(), features, labels, label_times, fwd, cpcv
+    ).distribution
+    net = evaluate_ensemble_under_cpcv(
+        _estimators(), features, labels, label_times, fwd, cpcv, round_trip_cost=0.02
+    ).distribution
+    assert net.median < gross.median  # a 2% round-trip cost eats the ~1% gross edge

@@ -434,6 +434,36 @@ class RobustnessConfig(_Section):
         return self
 
 
+class KillGateConfig(_Section):
+    """The seven-point kill-gate thresholds (Layer 2 kill-gate, P2.9 — Deep Dive #2).
+
+    *"Set thresholds before running"* (Inviolable Rule 1): these are the pass/fail bars for the
+    seven criteria, fixed in versioned config so no run can move the goalposts to make a candidate
+    pass. The kill-gate is an AND — a strategy proceeds toward capital only if it clears **all**
+    seven on honest, cost-inclusive, point-in-time data (Deep Dive #2, "The kill-gate"). Most
+    candidates fail here; that is the system working (Inviolable Rule 7).
+    """
+
+    # (1) CPCV median path-Sharpe > this, annualised, **after** full Indian costs + slippage.
+    cpcv_median_sharpe_min: float = Field(default=1.0)
+    # (2) Deflated Sharpe Ratio (a probability in [0, 1]) at/above this = positive & significant.
+    dsr_min: float = Field(default=0.95, ge=0, le=1)
+    # (3) PBO below this (~0.2-0.5 is the warning band; we take the strict end).
+    pbo_max: float = Field(default=0.2, ge=0, le=1)
+    # (4) Narrow, positive CPCV distribution: at most this fraction of paths negative, and ...
+    max_fraction_negative_paths: float = Field(default=0.05, ge=0, le=1)
+    # ... no path worse than this annualised Sharpe (no deeply negative / fragile path).
+    min_path_sharpe: float = Field(default=-0.5)
+    # (5) P&L not concentrated: profit factor >= this, and ...
+    min_profit_factor: float = Field(default=1.2, gt=0)
+    # ... no single trade contributing more than this fraction of gross profit.
+    max_trade_concentration: float = Field(default=0.5, gt=0, le=1)
+    # (7) Edge stable across regimes: every sufficiently-observed regime's mean net return >= this.
+    min_regime_mean_return: float = Field(default=0.0)
+    # A regime needs at least this many observations to be held to criterion 7 (else ignored).
+    regime_min_observations: int = Field(default=20, gt=0)
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -467,6 +497,8 @@ class Config(_Section):
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     # Defaulted likewise: the P2.8 robustness battery's knobs (default.yaml documents them).
     robustness: RobustnessConfig = Field(default_factory=RobustnessConfig)
+    # Defaulted likewise: the P2.9 seven-point kill-gate thresholds (default.yaml documents them).
+    kill_gate: KillGateConfig = Field(default_factory=KillGateConfig)
     logging: LoggingConfig
 
 

@@ -155,6 +155,12 @@ ignore_missing_imports = true
 module = ["lightgbm.*", "xgboost.*", "mlflow.*"]
 ignore_missing_imports = true
 
+# QuantStats (P2.9 tearsheet) is an optional, operator-installed research-env tool, absent in
+# CI; its lazy use is confined to research/reports/tearsheet.py behind an injected writer.
+[[tool.mypy.overrides]]
+module = ["quantstats.*"]
+ignore_missing_imports = true
+
 # --------------------------------------------------------------------------- #
 # pytest
 # --------------------------------------------------------------------------- #

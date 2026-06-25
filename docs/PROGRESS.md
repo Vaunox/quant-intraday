@@ -6,7 +6,7 @@ Updated at the end of every session.
 
 **Status:** ◐ in-progress / ☑ done / ☐ todo
 
-**Gates:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
+**Gates:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 2R (loop — per-cycle in iteration_log) ◯ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
 
 ---
 
@@ -48,8 +48,17 @@ Updated at the end of every session.
 | 2026-06-21 | P2.6 Model: baseline + tracking + calibration | ☑ done | `feat/p2.6-model-baseline` | 58 new (786 total) | `research/models/`: LightGBM baseline (native API) evaluated only under purged CV (pooled OOS predictions); permutation/MDA importance computed within the CV (not MDI); isotonic probability calibration (hand-rolled PAVA, no sklearn); purged-CV `HyperparameterTuner`; `ExperimentTracker` (in-memory default + lazy, confined `MLflowExperimentTracker` — operator-installed, pandas<3). `LightGBMBaseline` implements the live `Model`. Added `lightgbm`; mlflow not a declared dep. 100% cov on new modules. See notes. |
 | 2026-06-22 | P2.7 Ensemble + regime gate + registry | ☑ done | `feat/p2.7-ensemble-regime-registry` | 98 new (884 total) | `research/models/`: cross-family ensemble (LightGBM+XGBoost+logistic; rank-average/stack, OOF combiner+calibrator), GMM regime gate, `FileModelRegistry` (data/feature/label/model version tags + fingerprint), `evaluate_ensemble_under_cpcv`. Added `xgboost`. **Final registry-promotable run on real data was deferred to P2A.6 — now done** (run `e24c0cd6…`, artifact `ensemble-regime-v1-0001`). 100% cov on new modules. See notes. |
 | 2026-06-25 | P2.8 Robustness battery + two-engine reconciliation | ☑ done | `feat/p2.8-robustness-battery` | 69 new (1016 total) | `research/validation/{robustness,reconcile}.py` (5 stress tests + independent vectorised engine) + `research/pipeline/robustness{,_cli}.py` orchestration; ran vs the real P2A.6 artifact (MLflow exp `p2.8-robustness` id 3, 14 runs), **engines reconcile exactly** (max money diff 0.0); edge weak (~0.04 per-obs path-Sharpe). 100% cov on new modules. See notes. |
-| | P2.9 Validation report + kill-gate emitter | ☐ todo | | | |
-| | **GATE 2 — THE KILL-GATE** | ☐ | | | Tag `gate-2-research`. |
+| 2026-06-25 | P2.9 Validation report + kill-gate emitter | ☑ done | `feat/p2.9-killgate-emitter` | 38 new (1054 total) | `research/reports/` (seven-point kill-gate, validation report + renderer, QuantStats tearsheet) + `research/pipeline/validation{,_cli}.py`; **net-of-cost** CPCV + DSR + PBO + walk-forward + robustness → verdict. Ran vs the real candidate (MLflow exp `p2.9-killgate` id 4, run `cdf5dd8f…`): **VERDICT KILL** (6/7 failed; net CPCV median −0.977, walk-forward −9.8%). 100% cov on new modules. See notes + `docs/iteration_log/cycle-1_verdict.md`. |
+| | **GATE 2 — THE KILL-GATE** | ☐ not passed (machinery built; candidate KILLed → Phase 2R) | | | Tag `gate-2-research` only when a candidate clears all seven. Current candidate routed to Phase 2R (Cycle 2). |
+
+## Phase 2R — Research Iteration Loop
+
+| Date | Cycle / subtask | Status | Branch / commit | Artifact | Notes |
+|---|---|---|---|---|---|
+| 2026-06-25 | Cycle 1 · P2R.1 Diagnostic | ☑ done | `docs/cycle-1-diagnostic` (#43) | `docs/iteration_log/cycle-1_diagnostic.md` | Binding-constraint ranking: feature signal (primary) + label/barrier calibration (cheapest first); model capacity NOT the bottleneck. |
+| 2026-06-25 | Cycle 1 · P2R.3 Verdict | ☑ done | (P2.9 run) | `docs/iteration_log/cycle-1_verdict.md` | **KILL** → CONTINUE. Net-of-cost CPCV median −0.977; costs flip the gross edge negative, exactly as the diagnostic predicted. |
+| | Cycle 1 · P2R.4 Iteration budget | ☐ operator | | `docs/iteration_log/budget.md` | Operator sets the cycle/trial budget + pivot/stop criteria before Cycle 2. |
+| | Cycle 2 · label sanity (touch distribution) | ☐ next | | | One input family: triple-barrier/CUSUM calibration. |
 
 ## Phase 3 — Capital Layer
 
@@ -1902,3 +1911,88 @@ seed universe it almost certainly will not — and failing on a laptop is the sy
   in the name) — enough to drive identical fills. Real sizing is **P3.4** (vol-target + ¼-Kelly).
 
 **Next subtask: P2.9 — Validation report + kill-gate emitter.**
+
+### 2026-06-25 — P2.9 Validation report + kill-gate emitter ☑
+
+**Goal:** one report that decides trade/don't-trade — the §4b.8 output contract bundled with the
+**seven-point kill-gate** as PASS/KILL. Runbook: `docs/operator_runbooks/P2.9_killgate.md`.
+
+**Reference (Ground Rule 9):** Deep Dive #2 "The kill-gate" (the seven criteria), §4b.8 (the
+output contract: CPCV distribution, DSR, PBO, trial count, walk-forward equity, robustness),
+§4b.2/§4b.3/§4b.4 (CPCV/DSR/PBO), §4b.6 (the realistic, cost-inclusive backtester), Inviolable
+Rule 1 (thresholds set before running), Inviolable Rule 7 (most candidates die here).
+
+**Delivered (`research/reports/`, pure — fed primitive evidence, no model/pipeline imports):**
+- `killgate.py` — `KillGateEvidence` → `evaluate_kill_gate` → `KillGateVerdict` (the seven criteria
+  as an AND, each with observed-vs-threshold detail + a rendered decision block).
+- `report.py` — `ValidationReport` (the §4b.8 bundle) + text renderer + the cost/concentration/
+  regime stat primitives: `round_trip_cost_fraction` (Indian cost model + slippage → fraction of
+  notional), `net_event_returns` (gross − position-scaled round-trip cost, one round trip per
+  event), `profit_factor`, `trade_concentration`, `regime_breakdown`.
+- `tearsheet.py` — `write_quantstats_tearsheet` (confined, lazy QuantStats; research-env only,
+  injected writer in tests). `errors.py` — `ReportError`/`ReportDependencyError`.
+
+**Delivered (`research/pipeline/`, the orchestration that runs model + validation engine):**
+- `validation.py` — `build_validation_report`: rebuild the pooled dataset, compute the
+  **net-of-cost, annualised** CPCV path distribution (criterion 1 is *"after costs"* — the gross
+  ~0.04 from P2.8 is **not** the input), the DSR vs an honest candidate-config panel (PBO + trial
+  count from the same panel, computed once), the per-regime net returns (criterion 7), the
+  full-cost walk-forward equity (P2.1 backtester), and the robustness battery (P2.8) → assemble
+  the report, evaluate the gate, log to MLflow.
+- `validation_cli.py` + `scripts/run_validation_report.py` — one narrated command; `--output`
+  writes the rendered verdict; exit 0 once the report generates (a KILL is a *successful* report).
+- `core/config.py` + `config/default.yaml` — a `kill_gate` section (the seven thresholds, set
+  before running, Ground Rule 2 / Inviolable Rule 1).
+- `models/evaluation.py` — a backward-compatible `round_trip_cost` param on
+  `evaluate_ensemble_under_cpcv` (default 0.0 = the gross P2.7/P2.8 behaviour; P2.9 passes the
+  representative cost so the CPCV is net, with the regime-gate's train selection netted too).
+
+**Executed (AI, real candidate, persistent MLflow → sqlite, research env, reduced-knob smoke):**
+8-symbol universe, `2021-06-24 → 2026-06-23`. **VERDICT: KILL** (6 of 7 criteria failed).
+
+| item | value |
+|---|---|
+| MLflow | experiment `p2.9-killgate` (id **4**), kill-gate run **`cdf5dd8ff72c4555bde22050436eb042`** (`verdict=KILL`) |
+| (1) CPCV median path-Sharpe (annualised, **net**) | **−0.977** (all 5 paths negative; worst −1.288) — FAIL |
+| (2) Deflated Sharpe Ratio | 0.001 — FAIL · (3) PBO 0.265 — FAIL · (5) profit factor 0.826 — FAIL |
+| (6) robustness battery | **PASS** (robustly weak — not a knife-edge, generalises, reconciles) |
+| (7) regime stability | all 3 regimes loss-making net — FAIL |
+| walk-forward (full-cost) | net P&L **−₹98,471** (−9.8%), max DD 10.85%, 2568 fills |
+
+**Done-when:** ☑ the report generates end-to-end; ☑ it emits the seven-point verdict; ☑ tested.
+
+**Verification (all green, engine env, Py 3.12):** ruff, black, mypy strict (229 files), pre-commit
+(12 hooks); **1054 tests pass (38 new), 1 skipped** (POSIX-only); **100% coverage** on all six new
+modules (`killgate`, `report`, `tearsheet`, `errors`, `validation`, `validation_cli`).
+
+**Honesty note (Inviolable Rule 7).** KILL is the correct, expected outcome — and the verdict
+confirms the cycle-1 diagnostic exactly: the gross ~0.04 per-obs edge, netted of the representative
+~0.17% round-trip cost per event, **flips negative** (−0.977 annualised; profit factor 0.826;
+walk-forward −9.8%). Criterion 6 (robustness) *passing* while 1/2/4/5/7 fail is the gate working as
+designed — a signal can be *robustly* weak yet unprofitable after costs; robustness alone is not
+profitability. This run also doubles as P2.9's acceptance test (the gate correctly emits KILL on a
+known-failing input). **Gate 2 is NOT passed** — the candidate routes to **Phase 2R** (the verdict
+is recorded in `docs/iteration_log/cycle-1_verdict.md`).
+
+**Design decisions (Ground Rule 9, surfaced):**
+- **Net-of-cost CPCV via a per-event round-trip cost.** Criterion 1 demands cost-inclusive returns.
+  The CPCV operates on triple-barrier events (one round trip each: enter at t0, exit at the
+  barrier), so a representative round-trip cost from the real Indian cost + slippage models is
+  charged once per event, scaled by position size. The bar-level next-bar-open Backtester (P2.1)
+  is the complementary "walk-forward equity" deliverable. (Refinement: bar-level cost in the CPCV
+  itself; tracked.)
+- **PBO over a candidate-config panel.** The textbook CSCV PBO measures overfitting in *config
+  selection*, so the (T×N) matrix columns are a small panel of distinct model configs (tree
+  capacity, learning rate, blend), each one full-timeline net OOS series; the same panel feeds the
+  honest DSR trial count + variance. (Refinement: fold the cross-cycle MLflow trial budget into N;
+  tracked.)
+- **Reduced-knob local run, not the full-fidelity cloud battery.** Per the operator's steer + Part
+  II iteration discipline: a known-failing candidate is confirmed cheaply; the full-fidelity report
+  + cloud earn their spend only when a candidate's smoke path-Sharpe is meaningfully above zero.
+
+**Follow-ups / notes (deferred, tracked):**
+- **Phase 2R Cycle 2 (label sanity)** is the next action — dump the triple-barrier touch
+  distribution (the cheapest lever from the diagnostic). One input family per cycle.
+- **Operator: set the P2R.4 iteration budget** (`docs/iteration_log/budget.md`) before Cycle 2.
+
+**Next subtask: Phase 2R Cycle 2 — label sanity (triple-barrier touch distribution).**
