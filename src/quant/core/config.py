@@ -282,6 +282,12 @@ class FeaturesConfig(_Section):
     model always records which feature definition it trained on.
     """
 
+    # Cycle 3a (Phase 2R): compute features on a FINER bar grid than the 15-min decision clock,
+    # then align to the decision rows (Part II "15-min decision bars; features from finer data").
+    # ``None`` (default) = compute on the decision bars themselves (the legacy P1.6/P2A.6 path).
+    # When set it must be > 0, divide the decision frequency evenly, and be <= it — validated in
+    # the pipeline (which has both this and ``market.decision_frequency_minutes``).
+    feature_frequency_minutes: int | None = Field(default=None, gt=0)
     # Core families (P1.6).
     # Multi-horizon log-return lookbacks, in bars (Deep Dive #1 §2.2.B).
     return_horizons: tuple[int, ...] = Field(min_length=1)

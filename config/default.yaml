@@ -124,6 +124,8 @@ hygiene:
 
 features:
   # Feature families (P1.6/P1.7). Windows/horizons are in bars (1 bar = bar_interval_minutes).
+  feature_frequency_minutes: null          # null = compute features on the 15-min decision bars
+                                           # (legacy); set 5 or 1 for cycle-3a finer-grid features
   return_horizons: [1, 3, 5, 15, 30, 60]  # multi-horizon log returns
   volatility_window: 15                    # realized-vol rolling window
   atr_window: 14                           # average-true-range window

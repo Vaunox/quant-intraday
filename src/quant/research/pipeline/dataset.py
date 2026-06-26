@@ -157,8 +157,7 @@ def build_symbol_dataset(symbol: str, bars: pd.DataFrame, config: Config) -> Sym
     """
     resampled = resample_bars(bars, config.market.decision_frequency_minutes)
     times = pd.DatetimeIndex(resampled[serde.TIME_COLUMN], name=serde.TIME_COLUMN)
-    features = compute_feature_frame(resampled, config.features)
-    regime = _regime_frame(resampled, times, config)
+    features, regime = _feature_frames(bars, resampled, times, config)
 
     close = pd.Series(resampled["close"].to_numpy(dtype="float64"), index=times, name="close")
     if len(close) == 0:
@@ -338,6 +337,61 @@ def label_version(labeling: LabelingConfig) -> str:
         f"-d{labeling.barrier_lower_multiple}-min{labeling.barrier_min_return}"
         f"-vmax{labeling.vertical_max_hold_bars}"
     )
+
+
+def _feature_frames(
+    bars: pd.DataFrame, resampled: pd.DataFrame, times: pd.DatetimeIndex, config: Config
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compute the (model features, regime features), optionally on a finer grid (cycle 3a).
+
+    Default (``features.feature_frequency_minutes`` is ``None`` or equals the decision frequency):
+    compute on the 15-min decision bars — the legacy P1.6/P2A.6 path, unchanged. When a finer
+    frequency is configured, the same feature families are computed on the finer grid (e.g. 5-min)
+    and **point-in-time aligned** to the decision rows: each decision bar takes the finer bar that
+    closes at the *same instant* it does, so the data horizon is identical (no lookahead, Inviolable
+    Rule 2) while the features see sub-15-min structure (Part II "features from finer data").
+
+    Raises:
+        PipelineError: If the finer frequency does not evenly divide the decision frequency.
+    """
+    decision = config.market.decision_frequency_minutes
+    fine = config.features.feature_frequency_minutes
+    if fine is None or fine == decision:
+        return (
+            compute_feature_frame(resampled, config.features),
+            _regime_frame(resampled, times, config),
+        )
+    if fine > decision or decision % fine != 0:
+        raise PipelineError(
+            f"feature_frequency_minutes ({fine}) must be <= and evenly divide the decision "
+            f"frequency ({decision})"
+        )
+    fine_bars = resample_bars(bars, fine)
+    fine_times = pd.DatetimeIndex(fine_bars[serde.TIME_COLUMN], name=serde.TIME_COLUMN)
+    features = _align_fine_to_decision(
+        compute_feature_frame(fine_bars, config.features), times, decision, fine
+    )
+    regime = _align_fine_to_decision(
+        _regime_frame(fine_bars, fine_times, config), times, decision, fine
+    )
+    return features, regime
+
+
+def _align_fine_to_decision(
+    fine_frame: pd.DataFrame, decision_times: pd.DatetimeIndex, decision: int, fine: int
+) -> pd.DataFrame:
+    """Align finer-grid features to the decision rows by matching bar-close instants.
+
+    A decision bar ``[t, t+decision)`` closes at ``t + decision``; the finer bar that closes at the
+    same instant starts at ``t + (decision - fine)``. Reindexing the finer frame at those starts
+    and relabelling to ``decision_times`` gives each decision row the finer features with the
+    identical point-in-time horizon. A missing finer bar (a data gap) yields a NaN row, which the
+    caller drops as warm-up — never fabricated.
+    """
+    offset = pd.Timedelta(minutes=decision - fine)
+    aligned = fine_frame.reindex(decision_times + offset)
+    aligned.index = decision_times
+    return aligned
 
 
 def _regime_frame(resampled: pd.DataFrame, times: pd.DatetimeIndex, config: Config) -> pd.DataFrame:
