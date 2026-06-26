@@ -8,7 +8,9 @@ Updated at the end of every session.
 
 **Gates:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ (kill-gate KILL) · Gate 2A ☐ · Gate 2R (loop — **STOPPED at cycle 4**; research phase complete) ⊘ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
 
-> **⊘ RESEARCH PHASE STOPPED (Phase 2R cycle 4; tag `research-phase-stop-cycle-4`).** No strategy cleared the seven-point kill-gate net of costs; the budget's stop criterion engaged and was honored. Phases 3–8 deferred indefinitely (not deleted). No live trading. See `docs/iteration_log/closeout.md`.
+> **⊘ RESEARCH ARC CLOSED.** No strategy cleared the seven-point kill-gate net of costs. Phase 2R STOPPED at cycle 4 (tag `research-phase-stop-cycle-4`); the operator-directed **Cycle-5** re-open (daily/CNC, 56 survivorship-aware names, validated Kite data, honest CNC 0.22% / N=23) closed out at an honest **+0.148** annualised CPCV path-Sharpe (META; DIRECT −0.156) — real but economically negligible, fails the kill-gate (criteria 1 & 5). The pre-committed +0.3 stop band engaged and was honored. Phases 3–8 deferred indefinitely (not deleted). **No live trading.**
+>
+> **→ The authoritative close-out is [`docs/FINDINGS.md`](FINDINGS.md)** — what we built, what we found, why the kill-gate was never passed, and the honest ceiling of the edge, with MLflow run-IDs and exact numbers. See also `docs/iteration_log/closeout.md` (Phase 2R stop) and `docs/iteration_log/cycle-5_closeout.md` (Cycle-5 seal).
 
 ---
 

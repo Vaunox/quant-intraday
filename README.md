@@ -6,8 +6,16 @@ validated rigorously against overfitting, sized conservatively under hard, un-ov
 risk limits, executed via the Zerodha Kite Connect API, monitored for drift, and
 controllable from a secure mobile master-control app.
 
-> **Status:** Phase 1 (Data & Feature Layer) in progress — Gate 0 ✅ passed.
-> See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the live build log.
+> **Status: research arc CLOSED — no live trading.** The data + feature + model + validation
+> apparatus is built, gated, and sound (Gate 0 ✅, Gate 1 ✅). No candidate strategy cleared the
+> seven-point kill-gate net of realistic costs: the honest ceiling of the edge in this family is
+> **≈ +0.148 annualised CPCV path-Sharpe — real but too small to trade at retail.** The program
+> closes at this finding, on a pre-committed budget, $0 of capital risked — a successful
+> intellectual-honesty outcome, not a failure.
+>
+> **→ Read [`docs/FINDINGS.md`](docs/FINDINGS.md)** — the authoritative close-out: what we built,
+> what we found, why the kill-gate was never passed, and the honest ceiling of the edge (with
+> MLflow run-IDs and exact numbers). See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the full build log.
 
 > **Reality check.** Over 90% of retail F&O traders lose money. "High stable profit" is
 > not a goal and is not promised. The achievable target is a positive-expectancy,
