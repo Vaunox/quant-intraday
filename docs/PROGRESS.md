@@ -6,7 +6,9 @@ Updated at the end of every session.
 
 **Status:** ◐ in-progress / ☑ done / ☐ todo
 
-**Gates:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 2R (loop — per-cycle in iteration_log) ◯ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
+**Gates:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ (kill-gate KILL) · Gate 2A ☐ · Gate 2R (loop — **STOPPED at cycle 4**; research phase complete) ⊘ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
+
+> **⊘ RESEARCH PHASE STOPPED (Phase 2R cycle 4; tag `research-phase-stop-cycle-4`).** No strategy cleared the seven-point kill-gate net of costs; the budget's stop criterion engaged and was honored. Phases 3–8 deferred indefinitely (not deleted). No live trading. See `docs/iteration_log/closeout.md`.
 
 ---
 
@@ -60,7 +62,8 @@ Updated at the end of every session.
 | 2026-06-24 | P2R.4 Iteration budget (operator) | ☑ done | `docs/p2r-iteration-budget` (#45) | `docs/iteration_log/budget.md` | 6-cycle cap; 50-trial cap; STOP if best smoke path-Sharpe <+0.3 after cycle 4; PIVOT freq if <+0.5; tighten-only. |
 | 2026-06-25 | Cycle 2 · label sanity | ☑ done | `docs/cycle-2-finding` (#46) | `docs/iteration_log/cycle-2_finding.md` | Label SOUND — vertical only 16.4%, positive rate stable ~0.45. Hypothesis (b) refuted; labeling closed. 0 trials. |
 | 2026-06-25 | Cycle 3 · feature signal (3a + 3b decision) | ☑ done | `docs/cycle-3-plan` (#47), `feat/iteration-cycle3a-features-finer` (#48), `docs/cycle-3a-finding` (#49) | `cycle-3_plan.md` / `cycle-3a_finding.md` / `cycle-3b_decision.md` | **3a:** finer OHLCV (5/1-min) adds no signal (gross/obs +0.012/+0.015 vs +0.042 baseline) — closed. **3b:** depth deferred (no retail historical depth) → pivot. 2 trials. |
-| | Cycle 4 · frequency pivot to 60-min | ☐ next (holds for operator go) | | | Re-aggregate 60-min bars (same universe, no new data); report path-Sharpe delta vs 15-min baseline. **Budget stop-checkpoint cycle.** |
+| 2026-06-26 | Cycle 4 · frequency pivot to 60-min | ☑ done | `docs/cycle-4-finding` (#51), `docs/research-phase-closeout` | `cycle-4_finding.md` / `cycle-4_verdict.md` / `closeout.md` | 60-min **no lift** (gross flat +0.047; net −0.90 ann). Best smoke path-Sharpe far below +0.3 → **STOP criterion engaged**. Operator decision: **STOP** (honor the budget; daily-close/instrument pivots would be loosening). |
+| 2026-06-26 | **Phase 2R — STOPPED** | ⊘ research phase complete | tag `research-phase-stop-cycle-4` | `docs/iteration_log/closeout.md` | No edge survives costs at this configuration (intraday cash equity, 8 names, bar-data, retail costs). Apparatus + blueprint preserved; Phases 3–8 deferred indefinitely; no live trading. A successful Rule-7 outcome. |
 
 ## Phase 3 — Capital Layer
 
