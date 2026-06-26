@@ -3,7 +3,13 @@
 **Subtask:** P2R.2 cycle 3, planning artifact (authored *before* any 3a code). See the
 [cycle-1 diagnostic](cycle-1_diagnostic.md) (binding constraint **(a)**, feature signal), the
 [cycle-2 finding](cycle-2_finding.md) (labeling closed), and the [iteration budget](budget.md).
-**Status:** plan committed; **3a authorized**, **3b deferred** pending the operator's go.
+**Status:** plan committed; 3a **ran and was closed** (no lift — see [cycle-3a finding](cycle-3a_finding.md)); 3b **deferred** (see [cycle-3b decision](cycle-3b_decision.md)).
+
+> **Permanent structural fact (surfaced for future-us):** historical 5-level depth is **not
+> available at a retail budget** — it exists only at institutional tiers (₹tens-of-thousands+/month,
+> quote-based, redistribution-licensed). The **only** viable retail path to depth-augmented
+> features is **forward-recording via Kite's existing free WebSocket** (which costs calendar time +
+> Phase-5 live-capture infrastructure, not data fees). See §2 for the full cost-tier breakdown.
 
 The cycle-1 diagnostic's primary binding constraint is **feature signal (a)**, and it named two
 *distinct* feature gaps with very different costs. This plan records the data reality behind each,
@@ -25,22 +31,22 @@ the operator-cost analysis for the expensive one, and the cheap-test-first seque
 
 ## 2. Operator-cost analysis for 3b (depth microstructure)
 
-Two paths to usable depth-augmented features, both substantial — **decisions deferred to the
-operator**:
+Two distinctions decide everything: **L2 = 5-level depth** (what we designed to) vs **L3 = 20-level**
+(not retail-redistributable); and **live vs historical** — which is the crux. The full cost-tier
+breakdown (vendor pricing verified June 2026 to the extent it is public; depth tiers are
+quote-based, so treat the upper tiers as order-of-magnitude):
 
-- **(A) Record depth forward.** Wire P1.2's depth stream → a new persistent depth tier, run it
-  during market hours every session, accumulate. **Duration before usable:** weeks–months (depth
-  features need enough samples across regimes to train + validate honestly under purged CV). It
-  also **front-runs live-engine infrastructure** (a tick/depth store, a daily capture run) that is
-  otherwise Phase 6/8 work.
-- **(B) Buy historical L2/depth.** A paid NSE tick/depth vendor. **Cost:** money + integration +
-  variable coverage/quality; needs an adapter behind the `Repository` interface.
-- **(C) Weak proxy (not real depth).** Some microstructure-flavoured signal (signed volume via a
-  tick rule on minute bars, intrabar range) can be approximated from minute OHLCV — but this is
-  **not** 5-level-depth OFI and overlaps with 3a; it is not a substitute for (A)/(B).
+| path | data cost | what you get / the catch |
+|---|---|---|
+| **(A) Record forward** via Kite's existing WebSocket | **₹0 marginal** (live 5-level depth is already included in the ₹500/mo Kite Connect plan, just not wired/run) | the *only* retail-viable path; cost is **calendar time** (weeks–months to accumulate usable history across regimes) + engineering (wire P1.2 → a depth store, run daily) — which **front-runs Phase-5 live-capture infrastructure** into Phase 2R |
+| **(B) Retail real-time vendor** (TrueData, Global Datafeeds) | ~**₹990–a few-₹1,000s/month** | largely **duplicates** the live depth Kite already gives free; standard historical products are trades/OHLCV/L1, **not** historical depth-of-book — so it does **not** close the historical gap |
+| **(C) Institutional historical L2 depth** (NSE Data & Analytics / LSEG / TickData) | **₹tens-of-thousands to ₹lakhs/month**, quote-based + redistribution-licensed | the only source of *historical* 5-level depth-of-book at scale; not a retail-budget purchase |
+| (D) Weak proxy from minute OHLCV | ₹0 | signed-volume tick-rule / intrabar range ≈ microstructure-*flavoured*, but **not** 5-level OFI; overlaps with 3a, not a substitute |
 
-**Deferred to operator:** whether/when to start forward recording (A), or to procure a vendor
-feed (B). 3b stays **not active** until that data decision is made.
+**Bottom line:** historical 5-level depth is not buyable at a retail budget; **forward-recording
+via Kite (path A) is the only viable route**, and its true cost is time + Phase-5 infra, not data
+fees. A ~₹1k/mo vendor buys live depth we already have free and does not supply history. **Deferred
+to operator** — resolved in the [cycle-3b decision](cycle-3b_decision.md): 3b deferred, pivot first.
 
 ## 3. Sequencing — 3a first (cheap test), then 3b (data-gated)
 

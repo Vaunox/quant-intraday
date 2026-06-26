@@ -57,8 +57,10 @@ Updated at the end of every session.
 |---|---|---|---|---|---|
 | 2026-06-25 | Cycle 1 · P2R.1 Diagnostic | ☑ done | `docs/cycle-1-diagnostic` (#43) | `docs/iteration_log/cycle-1_diagnostic.md` | Binding-constraint ranking: feature signal (primary) + label/barrier calibration (cheapest first); model capacity NOT the bottleneck. |
 | 2026-06-25 | Cycle 1 · P2R.3 Verdict | ☑ done | (P2.9 run) | `docs/iteration_log/cycle-1_verdict.md` | **KILL** → CONTINUE. Net-of-cost CPCV median −0.977; costs flip the gross edge negative, exactly as the diagnostic predicted. |
-| | Cycle 1 · P2R.4 Iteration budget | ☐ operator | | `docs/iteration_log/budget.md` | Operator sets the cycle/trial budget + pivot/stop criteria before Cycle 2. |
-| | Cycle 2 · label sanity (touch distribution) | ☐ next | | | One input family: triple-barrier/CUSUM calibration. |
+| 2026-06-24 | P2R.4 Iteration budget (operator) | ☑ done | `docs/p2r-iteration-budget` (#45) | `docs/iteration_log/budget.md` | 6-cycle cap; 50-trial cap; STOP if best smoke path-Sharpe <+0.3 after cycle 4; PIVOT freq if <+0.5; tighten-only. |
+| 2026-06-25 | Cycle 2 · label sanity | ☑ done | `docs/cycle-2-finding` (#46) | `docs/iteration_log/cycle-2_finding.md` | Label SOUND — vertical only 16.4%, positive rate stable ~0.45. Hypothesis (b) refuted; labeling closed. 0 trials. |
+| 2026-06-25 | Cycle 3 · feature signal (3a + 3b decision) | ☑ done | `docs/cycle-3-plan` (#47), `feat/iteration-cycle3a-features-finer` (#48), `docs/cycle-3a-finding` (#49) | `cycle-3_plan.md` / `cycle-3a_finding.md` / `cycle-3b_decision.md` | **3a:** finer OHLCV (5/1-min) adds no signal (gross/obs +0.012/+0.015 vs +0.042 baseline) — closed. **3b:** depth deferred (no retail historical depth) → pivot. 2 trials. |
+| | Cycle 4 · frequency pivot to 60-min | ☐ next (holds for operator go) | | | Re-aggregate 60-min bars (same universe, no new data); report path-Sharpe delta vs 15-min baseline. **Budget stop-checkpoint cycle.** |
 
 ## Phase 3 — Capital Layer
 

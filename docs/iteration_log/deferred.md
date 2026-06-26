@@ -20,6 +20,22 @@ kill-gate.
 - **Cost if activated:** cheap (a labeling-parameter A/B; reuses the whole harness).
 - **Status:** not active; 0 trials.
 
+## Depth microstructure (cycle 3b) — OFI / depth imbalance / signed flow
+
+The diagnostic's "top feature" (Deep Dive #1 §2.2) — but **data-gated and deferred**, not closed
+(see the [cycle-3b decision](cycle-3b_decision.md)). Historical 5-level depth is not available at a
+retail budget; the only viable path is forward-recording via Kite's free WebSocket
+([cycle-3 plan](cycle-3_plan.md) §2), which needs weeks–months of accumulation and pulls Phase-5
+live-capture infrastructure forward. 3a showed finer *OHLCV* adds no signal, which *sharpens* 3b's
+hypothesis (the missing signal may be genuinely microstructural) — but the frequency pivot is the
+cheaper, no-wait test to run first.
+
+- **Trigger:** the 60-min (Cycle 4) and daily-close pivots both fail. Then record depth forward
+  **during Phase 5's live-ingest work** (architecturally clean) rather than as a Phase 2R side-quest.
+- **Cost if activated:** ₹0 data (Kite live depth) but weeks–months of forward recording + a new
+  persistent depth tier; or institutional historical depth (₹tens-of-thousands+/month).
+- **Status:** not active; 0 trials.
+
 ## Universe expansion to a survivorship-correct Nifty-50/100
 
 The research universe is 8 Nifty-heavyweight names. Expanding to a larger survivorship-correct
