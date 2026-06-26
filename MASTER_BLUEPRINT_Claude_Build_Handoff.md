@@ -1303,7 +1303,13 @@ Phase 8 begins with the operator subphase P8A above; the engineering subtasks be
 | | P8A.2 | ☐ todo | | | Fund the live account (~₹40k validation capital); kill-criteria pre-committed. Runbook `docs/operator_runbooks/P8A.2_funding.md`. |
 | | P8A.3 | ☐ todo | | | First live week — daily operator-authorized micro-live, panic-flatten ready; 5 clean days → sign off (or pause). Runbook `docs/operator_runbooks/P8A.3_first_week.md`. |
 
-**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ · Gate 2A ☐ · Gate 2R (loop — no single gate; tracked per-cycle in iteration_log) ◯ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
+**Gate status:** Gate 0 ☑ · Gate 1 ☑ · Gate 2 ☐ (**kill-gate KILL**; never passed) · Gate 2A ☐ · Gate 2R (loop — **STOPPED at cycle 4**: no edge survives costs; research phase complete) ⊘ · Gate 3 ☐ · Gate 4 ☐ · Gate 5 ☐ · Gate 5A ☐ · Gate 6 ☐ · Gate 7 ☐ · Gate 7A ☐ · Gate 8A ☐ · Gate 8 ☐
+
+> **RESEARCH PHASE STOPPED (Phase 2R, cycle 4; tag `research-phase-stop-cycle-4`).** No strategy
+> cleared the seven-point kill-gate on honest, cost-inclusive data; the iteration budget's stop
+> criterion engaged and was honored. Phases 3–8 are deferred **indefinitely** (not deleted). **No
+> live trading.** See `docs/iteration_log/closeout.md` for the full conclusion and the inventory of
+> what the apparatus can be re-pointed at if a future research program is defined.
 
 ---
 
