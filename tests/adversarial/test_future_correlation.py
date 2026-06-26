@@ -11,14 +11,21 @@ import pytest
 from quant.data.features import (
     atr,
     bollinger_percent_b,
+    cci,
+    directional_index,
     log_return,
     macd_histogram,
+    macd_line,
+    money_flow_index,
     parkinson_volatility,
     realized_volatility,
     rsi,
+    sma,
     trend_strength,
     volatility_regime,
+    volume_weighted_ma,
     vwap_deviation,
+    williams_r,
 )
 from tests.adversarial import leakage, leaky_features, sample_data
 
@@ -38,6 +45,13 @@ _FEATURES: dict[str, leakage.FeatureFn] = {
     "rsi": lambda b: rsi(b, 14),
     "macd_histogram": lambda b: macd_histogram(b, fast=12, slow=26, signal=9),
     "bollinger_percent_b": lambda b: bollinger_percent_b(b, period=20, num_std=2.0),
+    "macd_line": lambda b: macd_line(b, fast=12, slow=26, signal=9),
+    "cci": lambda b: cci(b, 14),
+    "directional_index": lambda b: directional_index(b, 14),
+    "williams_r": lambda b: williams_r(b, 14),
+    "money_flow_index": lambda b: money_flow_index(b, 14),
+    "sma": lambda b: sma(b, 10),
+    "volume_weighted_ma": lambda b: volume_weighted_ma(b, 10),
     "volatility_regime": lambda b: volatility_regime(b, vol_window=10, lookback=30),
     "trend_strength": lambda b: trend_strength(b, window=10),
 }

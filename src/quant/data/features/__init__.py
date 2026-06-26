@@ -32,7 +32,19 @@ from quant.data.features.microstructure import (
 from quant.data.features.normalize import robust_zscore, rolling_zscore, winsorize
 from quant.data.features.regime import trend_strength, volatility_regime
 from quant.data.features.returns import log_return
-from quant.data.features.technical import bollinger_percent_b, macd_histogram, rsi
+from quant.data.features.technical import (
+    bollinger_bands,
+    bollinger_percent_b,
+    cci,
+    directional_index,
+    macd_histogram,
+    macd_line,
+    money_flow_index,
+    rsi,
+    sma,
+    volume_weighted_ma,
+    williams_r,
+)
 from quant.data.features.temporal import time_of_day_features
 from quant.data.features.volatility import atr, parkinson_volatility, realized_volatility
 from quant.data.features.vwap import intraday_vwap, vwap_deviation
@@ -41,16 +53,21 @@ __all__ = [
     "FeatureError",
     "atr",
     "bid_ask_spread",
+    "bollinger_bands",
     "bollinger_percent_b",
+    "cci",
     "compute_feature_frame",
     "compute_features_asof",
     "cross_sectional_rank",
     "depth_imbalance",
     "depth_to_frame",
+    "directional_index",
     "feature_names",
     "intraday_vwap",
     "log_return",
     "macd_histogram",
+    "macd_line",
+    "money_flow_index",
     "order_flow_imbalance",
     "parkinson_volatility",
     "realized_volatility",
@@ -60,10 +77,13 @@ __all__ = [
     "rsi",
     "sector_neutral_zscore",
     "signed_volume",
+    "sma",
     "time_of_day_features",
     "trades_to_frame",
     "trend_strength",
     "volatility_regime",
+    "volume_weighted_ma",
     "vwap_deviation",
+    "williams_r",
     "winsorize",
 ]

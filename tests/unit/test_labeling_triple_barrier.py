@@ -8,6 +8,7 @@ session-end vertical barrier.
 
 from collections.abc import Sequence
 from datetime import date, datetime
+from typing import Literal
 
 import pandas as pd
 import pytest
@@ -24,7 +25,12 @@ D2 = date(2024, 6, 4)  # Tue
 
 
 def _labeler(
-    *, k_up: float = 2.0, k_dn: float = 1.5, min_return: float = 0.002, max_hold: int = 0
+    *,
+    k_up: float = 2.0,
+    k_dn: float = 1.5,
+    min_return: float = 0.002,
+    max_hold: int = 0,
+    holding_mode: Literal["mis", "cnc"] = "mis",
 ) -> TripleBarrierLabeler:
     return TripleBarrierLabeler(
         LabelingConfig(
@@ -33,6 +39,7 @@ def _labeler(
             barrier_lower_multiple=k_dn,
             barrier_min_return=min_return,
             vertical_max_hold_bars=max_hold,
+            holding_mode=holding_mode,
         )
     )
 
@@ -105,6 +112,49 @@ def test_vertical_exactly_flat_is_zero() -> None:
     row = _labeler().label(bars, pd.DatetimeIndex([at(D1, 9, 15)]), _vol(bars, 0.01)).frame.iloc[0]
     assert row["label"] == 0
     assert row["barrier"] == "vertical"
+
+
+# --- holding mode: MIS (intraday square-off) vs CNC (multi-day hold) ----------
+
+# Two sessions; the event's forward path stays inside the barriers through D1 and only
+# breaches the upper barrier in D2 (the next session).
+_CROSS_SESSION_BARS = [
+    (at(D1, 9, 15), 100.0, 100.3, 99.7, 100.0),  # event bar (reference close 100)
+    (at(D1, 9, 30), 100.0, 100.5, 99.8, 100.1),  # D1 session end — no barrier touch
+    (at(D2, 9, 15), 100.1, 102.5, 100.0, 101.5),  # D2: high 102.5 >= 102 -> upper (+1)
+    (at(D2, 9, 30), 101.5, 101.8, 101.0, 101.2),
+]
+
+
+def test_mis_mode_squares_off_at_session_end() -> None:
+    # MIS clamps the vertical barrier to D1's session end even with room to hold longer.
+    bars = _bars(_CROSS_SESSION_BARS)
+    events = pd.DatetimeIndex([at(D1, 9, 15)])
+    row = (
+        _labeler(max_hold=5, holding_mode="mis").label(bars, events, _vol(bars, 0.01)).frame.iloc[0]
+    )
+    assert row["barrier"] == "vertical"
+    assert row["exit_time"] == at(D1, 9, 30)  # no overnight: resolved at D1's last bar
+
+
+def test_cnc_mode_holds_across_the_session_boundary() -> None:
+    # CNC lets the same event hold overnight into D2, where the upper barrier is touched.
+    bars = _bars(_CROSS_SESSION_BARS)
+    events = pd.DatetimeIndex([at(D1, 9, 15)])
+    row = (
+        _labeler(max_hold=5, holding_mode="cnc").label(bars, events, _vol(bars, 0.01)).frame.iloc[0]
+    )
+    assert row["label"] == 1
+    assert row["barrier"] == "upper"
+    assert row["exit_time"] == at(D2, 9, 15)  # held across the session boundary
+
+
+def test_unknown_holding_mode_is_rejected() -> None:
+    from quant.research.labeling import barriers
+
+    times = pd.DatetimeIndex([at(D1, 9, 15), at(D1, 9, 30)])
+    with pytest.raises(LabelingInputError):
+        barriers.vertical_anchor_positions(times, holding_mode="swing")
 
 
 # --- path dependence ---------------------------------------------------------

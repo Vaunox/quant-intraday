@@ -72,6 +72,36 @@ def session_last_position(times: pd.DatetimeIndex) -> npt.NDArray[np.intp]:
     return last
 
 
+def vertical_anchor_positions(
+    times: pd.DatetimeIndex, *, holding_mode: str = "mis"
+) -> npt.NDArray[np.intp]:
+    """Per-bar anchor that :func:`vertical_position` clamps the vertical barrier to.
+
+    The two holding modes differ only in what bounds the hold:
+
+    * ``"mis"`` (intraday, default) — the anchor is the last bar of each bar's **IST session**,
+      so the vertical barrier never crosses a session boundary (overnight square-off). Original,
+      unchanged behaviour (delegates to :func:`session_last_position`).
+    * ``"cnc"`` (delivery / multi-day) — the anchor is the **final bar of the series**, so
+      :func:`vertical_position` resolves the vertical barrier to ``event + max_hold`` bars
+      *across* session boundaries (an overnight/multi-day hold). Only meaningful with a positive
+      ``max_hold``; with ``max_hold == 0`` it degenerates to "hold to the series end".
+
+    Args:
+        times: The (sorted, unique, tz-aware) bar timeline.
+        holding_mode: ``"mis"`` or ``"cnc"``.
+
+    Raises:
+        LabelingInputError: If ``holding_mode`` is neither ``"mis"`` nor ``"cnc"``.
+    """
+    if holding_mode == "mis":
+        return session_last_position(times)
+    if holding_mode == "cnc":
+        n = times.shape[0]
+        return np.full(n, max(n - 1, 0), dtype=np.intp)
+    raise LabelingInputError(f"unknown holding_mode {holding_mode!r} (expected 'mis' or 'cnc')")
+
+
 def event_positions(events: pd.DatetimeIndex, times: pd.DatetimeIndex) -> list[int]:
     """Map event timestamps to bar positions (sorted, de-duped), failing loud on an unknown."""
     if not isinstance(events, pd.DatetimeIndex):

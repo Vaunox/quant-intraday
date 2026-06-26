@@ -188,6 +188,12 @@ class LabelingConfig(_Section):
     barrier_min_return: float = Field(ge=0)
     # Vertical barrier: 0 = session end (MIS square-off); else cap the hold to this many bars.
     vertical_max_hold_bars: int = Field(ge=0)
+    # Holding mode: "mis" clamps the vertical barrier to the IST session end (intraday
+    # square-off — no overnight); "cnc" allows multi-day holds, so the vertical barrier is
+    # ``event + vertical_max_hold_bars`` bars ahead across session boundaries (delivery/CNC).
+    # CNC requires ``vertical_max_hold_bars > 0`` (the hold horizon); the daily/CNC product
+    # uses this. Default "mis" preserves the original intraday behaviour exactly.
+    holding_mode: Literal["mis", "cnc"] = "mis"
 
 
 class RiskConfig(_Section):

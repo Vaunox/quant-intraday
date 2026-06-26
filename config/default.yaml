@@ -78,6 +78,7 @@ labeling:
   barrier_lower_multiple: 1.5     # stop-loss at -1.5 sigma (tighter than the target)
   barrier_min_return: 0.002       # 0.2% floor — barriers must clear the cost hurdle (§3.2)
   vertical_max_hold_bars: 0       # 0 = vertical barrier at session end (MIS square-off)
+  holding_mode: mis               # mis = intraday square-off; cnc = multi-day hold (delivery)
 
 risk:
   max_daily_loss_pct: 2.0         # daily loss limit -> flatten + halt for the day

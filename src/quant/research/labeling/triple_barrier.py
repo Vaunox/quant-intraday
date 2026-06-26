@@ -88,6 +88,7 @@ class TripleBarrierLabeler:
         self._k_dn = config.barrier_lower_multiple
         self._min_return = config.barrier_min_return
         self._max_hold = config.vertical_max_hold_bars
+        self._holding_mode = config.holding_mode
 
     def label(
         self, bars: pd.DataFrame, events: pd.DatetimeIndex, volatility: pd.Series
@@ -125,7 +126,7 @@ class TripleBarrierLabeler:
         close = frame["close"].to_numpy(dtype="float64")
         high = frame["high"].to_numpy(dtype="float64")
         low = frame["low"].to_numpy(dtype="float64")
-        session_last = barriers.session_last_position(times)
+        session_last = barriers.vertical_anchor_positions(times, holding_mode=self._holding_mode)
 
         rows: list[dict[str, object]] = []
         index: list[pd.Timestamp] = []
