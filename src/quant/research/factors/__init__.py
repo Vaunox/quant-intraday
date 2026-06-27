@@ -12,6 +12,7 @@ from quant.research.factors.combine import (
     sector_neutral_composite,
 )
 from quant.research.factors.errors import FactorError
+from quant.research.factors.gate import FactorGateVerdict, GateMetrics, evaluate_factor_gate
 from quant.research.factors.price_factors import (
     amihud_illiquidity,
     low_volatility,
@@ -23,9 +24,12 @@ from quant.research.factors.price_factors import (
 __all__ = [
     "EqualWeightComposite",
     "FactorError",
+    "FactorGateVerdict",
+    "GateMetrics",
     "SignalCombiner",
     "WeightedComposite",
     "amihud_illiquidity",
+    "evaluate_factor_gate",
     "low_volatility",
     "momentum_12_1",
     "residual_momentum",
