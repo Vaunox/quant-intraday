@@ -207,6 +207,15 @@ kill_gate:
   min_regime_mean_return: 0.0     # (7) every observed regime's mean net return >= this
   regime_min_observations: 20     # (7) a regime needs >= this many obs to be judged
 
+mechanisms:
+  # Mechanical-edge research harness (Part VI / Phase 6). Lets non-directional / event-driven
+  # strategies plug into the EXISTING CPCV + kill-gate engine, and enforces an honest cumulative
+  # DSR trial count + a committed pre-registration. Thresholds the gate judges by are reused from
+  # the kill_gate section above — Part VI builds strategies that plug into the judge, not a new one.
+  experiment_names: [mechanical-edge]  # MLflow experiments whose cumulative run count IS the DSR N
+                                       # (every variant ever run, incl. discarded — P6.2). Never a literal.
+  prereg_dir: "docs/mechanisms"        # where <mechanism>_prereg.md pre-registrations live (P6.3)
+
 logging:
   level: INFO                     # DEBUG | INFO | WARNING | ERROR | CRITICAL
   format: json                    # json | text

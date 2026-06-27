@@ -172,6 +172,50 @@ Pre-committed gate + budget: [`config/factor_default.yaml`](../config/factor_def
 
 ---
 
+# Part VI — Mechanical-Edge Research Program
+
+*Added 2026-06-27 (blueprint Part VI). A new first-class research arc succeeding the closed MIS-directional program: the thesis is that retail-accessible alpha comes from **non-directional mechanical edges** (structural flows, statistical relationships, event mechanics), judged by the **same** seven-point kill-gate. **Part-VI Phase/task IDs P6.x–P9.x refer to the mechanical-edge program**, disambiguated from the identically-numbered Part-IV phases above (cite as "Part VI / P6.1"). The validation engine is **reused, not rebuilt**.*
+
+## Phase 6 — Mechanical-Edge Research Harness
+
+| Date | Subtask | Status | Branch / commit | Tests | Notes |
+|---|---|---|---|---|---|
+| 2026-06-27 | P6.1 Non-directional strategy-specification layer | ☑ done | `docs/blueprint-part-vi-mechanical-edge` | 11 new | `research/mechanisms/`: `StrategySpec` Protocol (event/entry/exit/holding/weight → per-event net returns) + `SeriesStrategySpec` reference + `spec_backtest_fn` (adapts a spec to the existing CPCV `BacktestFn`) + `evaluate_spec_under_cpcv` + `mechanism_kill_gate_evidence` (assembles the seven-point `KillGateEvidence`). **Validation engine untouched**; a synthetic spec runs end-to-end through the unchanged CPCV + kill-gate (PASS on a strong edge, KILL on a negative one). |
+| 2026-06-27 | P6.2 Honest cumulative trial-count wiring (DSR auto-deflation) | ☑ done | `docs/blueprint-part-vi-mechanical-edge` | 11 new | `research/mechanisms/trials.py`: `TrialCountSource` Protocol + `TrackerTrialCountSource` (default) + confined `MlflowTrialCountSource` (cumulative run count across `config.mechanisms.experiment_names`; lazy `mlflow` import routed through the single `research/models/` seam `import_mlflow`, so the confinement guard stays green). `deflated_sharpe_auto` is the **only** DSR entry point — N is pulled from the live count, never a literal. An **AST guard test asserts no mechanism-layer caller passes a literal N** (the direct fix for FINDINGS §4.1 cause (b): hard-coded N=5 → honest N=23). |
+| 2026-06-27 | P6.3 Pre-registration protocol | ☑ done | `docs/blueprint-part-vi-mechanical-edge` | 11 new | `research/mechanisms/preregistration.py` + `docs/mechanisms/{PREREGISTRATION_TEMPLATE.md,README.md}`: parse/validate `<mechanism>_prereg.md` front-matter (hypothesis, economic rationale, pre-committed success/kill thresholds, trial budget); `require_preregistration` gates a study on a **tracked, committed, clean** prereg (injectable git runner); `CommittedPreregistration.verify_precedes` asserts the commit precedes the first test run (auditable in git history). |
+| 2026-06-27 | **GATE 6 (Part VI)** | ☑ **passed** | | 33 new (1172 total, mypy strict clean) | A non-directional spec runs through the **unchanged** kill-gate, DSR auto-deflates from the live cumulative trial count, and the pre-registration protocol is in force. **The harness is ready; no mechanism judged yet.** |
+
+## Phase 7 — Mechanism Studies
+
+| Date | Subtask | Status | Branch / commit | Tests | Notes |
+|---|---|---|---|---|---|
+| | P7.1 Index-rebalance flow | ☐ todo | | | **BLOCKED on an operator decision:** the Phase-7 budget (cycle cap, cumulative trial cap, stop/pivot criteria) must be committed to `docs/mechanisms/budget.md` **before P7.1 begins** (operator-only, mirrors P2R.4), and a pre-registration committed first (P6.3). |
+| | P7.2 Cointegration pairs / stat-arb *(conditional)* | ☐ todo | | | Pursued only if P7.1 KILLs; counts toward the cumulative trial budget. |
+| | P7.3 Event-driven / PEAD *(conditional)* | ☐ todo | | | Pursued only if P7.1/P7.2 KILL; ideally consumes P9.2 event data. |
+| | **GATE 7 (Part VI)** | ☐ | | | A mechanism clears the kill-gate (→ Phase 8) **or** the budget's stop criterion engages with all mechanisms killed (honest stop, Rule 7). |
+
+## Phase 8 — CNC Execution Layer *(deferred Stage-2; built only if GATE 7 passes)*
+
+| Date | Subtask | Status | Branch / commit | Tests | Notes |
+|---|---|---|---|---|---|
+| | P8.1 CNC mode in the realistic backtester | ☐ todo | | | Multi-day holds, no forced 15:20 square-off; MIS path byte-for-byte unchanged. |
+| | P8.2 CNC mode in the reconciliation engines | ☐ todo | | | |
+| | P8.3 CNC delivery cost model (gated, replacing the 0.22% scalar) | ☐ todo | | | Itemised CNC cost from first principles (0.10% STT both legs + stamp + exch/SEBI/GST). |
+| | P8.4 End-to-end CNC validation through the kill-gate | ☐ todo | | | |
+| | **GATE 8 (Part VI)** | ☐ | | | The Phase-7 winner survives the full CNC execution layer through the kill-gate. |
+
+## Phase 9 — Proprietary Data Accrual *(runs in parallel; ongoing — no terminal gate)*
+
+| Date | Subtask | Status | Branch / commit | Tests | Notes |
+|---|---|---|---|---|---|
+| | P9.1 Forward-record live 5-level depth | ☐ todo | | | The data Cycle 3b proved unbuyable at retail; accrues over months via the P1.2 stream + P1.3 archive. |
+| | P9.2 Systematic event-reaction recording | ☐ todo | | | Earnings surprise → reaction → drift, to feed P7.3. |
+| | **GATE 9 (Part VI)** | ☐ ongoing | | | Datasets accrue + are research-queryable; sufficiency judged by the studies that consume them. |
+
+**Part-VI gate status:** Gate 6 ☑ · Gate 7 ☐ · Gate 8 ☐ · Gate 9 ☐ (ongoing). **Rules in force:** every Part I Engineering Ground Rule + Inviolable Rule — above all Rule 1 (kill-gate sacred), Rule 4 (honest cost modeling), honest cumulative trial counting (P6.2), and Rule 7 (an honest negative is a successful outcome).
+
+---
+
 ## Session notes
 
 ### 2026-06-17 — P0.1 Repository & tooling ☑
@@ -2038,3 +2082,67 @@ is recorded in `docs/iteration_log/cycle-1_verdict.md`).
 - **Operator: set the P2R.4 iteration budget** (`docs/iteration_log/budget.md`) before Cycle 2.
 
 **Next subtask: Phase 2R Cycle 2 — label sanity (triple-barrier touch distribution).**
+
+---
+
+### 2026-06-27 — Part VI / Phase 6 — Mechanical-Edge Research Harness (GATE 6) ☑
+
+Built the Part-VI Phase-6 harness to its acceptance criteria on branch
+`docs/blueprint-part-vi-mechanical-edge`. The harness lets **non-directional / event-driven**
+strategies be expressed and judged by the **existing** CPCV / DSR / PBO / kill-gate engine — the
+validation engine is **reused, not rebuilt** (Part VI mandate). 33 new tests (1172 total green;
+mypy strict clean; ruff/black clean on the new code).
+
+**P6.1 — `research/mechanisms/spec.py`.** A `StrategySpec` Protocol (event / entry / exit /
+holding / weight → per-event **net, cost-inclusive** returns + `label_times` for purge/embargo),
+the reference `SeriesStrategySpec` (wraps a precomputed net-return series — proves the harness and
+is reusable wherever a mechanism computes returns elsewhere), `spec_backtest_fn` (adapts a spec to
+the existing `cpcv.BacktestFn` — **no change to the engine**), `evaluate_spec_under_cpcv`
+(reconstructs the φ path-Sharpe distribution, mirroring `evaluate_active_under_cpcv`), and
+`mechanism_kill_gate_evidence` (assembles the seven-point `KillGateEvidence` the **unchanged**
+`evaluate_kill_gate` consumes). Tests run a synthetic spec end-to-end: PASS on a strong edge,
+KILL on a net-negative one (the gate is genuinely wired, not rigged).
+
+**P6.2 — `research/mechanisms/trials.py`.** `TrialCountSource` Protocol +
+`TrackerTrialCountSource` (in-memory default) + confined `MlflowTrialCountSource` (cumulative run
+count across `config.mechanisms.experiment_names`). The lazy `mlflow` import is routed through a
+single new seam in the confined package — `research/models/tracking.import_mlflow` — so
+`test_models_confinement` stays green (mechanisms never imports `mlflow` directly).
+`deflated_sharpe_auto` is the **only** DSR entry point in the layer: N comes from
+`trial_source.cumulative_trial_count()`, never a literal. An **AST guard test**
+(`test_no_caller_passes_a_literal_trial_count`) walks every mechanisms-package source and fails if
+any DSR call has an integer literal in the `n_trials` slot — and a companion test proves the guard
+fires on a planted literal. This is the direct fix for `FINDINGS.md` §4.1 cause (b) (hard-coded
+N=5 → honest N=23): it can never be hard-coded again.
+
+**P6.3 — `research/mechanisms/preregistration.py` + `docs/mechanisms/`.** A pre-registration
+template (`PREREGISTRATION_TEMPLATE.md`) + workflow (`README.md`); a parser/validator for
+`<mechanism>_prereg.md` front-matter (hypothesis, economic rationale, pre-committed success/kill
+thresholds, planned trial budget — fails loudly on a missing field); `require_preregistration`
+gates a study on a **tracked, committed, clean** prereg (git verification via an **injectable**
+runner — tests touch no real repo); `CommittedPreregistration.verify_precedes` asserts the prereg
+commit **precedes** the first test run (auditable in git history).
+
+**Config (Ground Rule 2).** New `MechanismsConfig` section (`config/default.yaml` → `mechanisms:`):
+`experiment_names` (the experiments forming the honest cumulative DSR N) and `prereg_dir`. Wired
+into `Config` as a defaulted section; loads clean.
+
+**Design decisions (Ground Rule 9, surfaced):**
+- **Scope = GATE 6 only, by the gate discipline.** Phase 7 cannot begin until the operator commits
+  a budget *in writing before P7.1* (explicitly an operator-only decision) and each mechanism has a
+  committed pre-registration; Phase 8 is built *only if* a Phase-7 mechanism clears GATE 7; Phase 9
+  needs live Kite-stream infra. Building them now would violate Inviolable Rules 1 & 8. The harness
+  is the buildable-now unit; it is ready, and **no mechanism is judged yet.**
+- **MLflow confinement preserved.** P6.2 needs the cumulative MLflow run count, but `mlflow` must
+  stay confined to `research/models/` (Ground Rule 1). Resolved by adding one confined import seam
+  (`import_mlflow`) the mechanisms layer calls — not by importing `mlflow` in mechanisms or by
+  relaxing the confinement guard.
+
+**Follow-ups / notes (deferred, tracked):**
+- **Operator: commit the Phase-7 budget** to `docs/mechanisms/budget.md` (cycle cap, cumulative
+  trial cap, stop/pivot criteria) **before P7.1** — mirrors the P2R.4 discipline.
+- **Operator: confirm Part-VI dual phase-numbering** (P6.x–P9.x reused for the mechanical-edge
+  program) is acceptable, or request a renumber (flagged in the blueprint Part VI).
+
+**Next subtask: Part VI / P7.1 — Index-rebalance flow** (blocked on the operator's Phase-7 budget
++ a committed pre-registration).
