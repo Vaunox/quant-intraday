@@ -20,6 +20,11 @@ from quant.research.factors.price_factors import (
     residual_momentum,
     short_term_reversal,
 )
+from quant.research.factors.universe import (
+    average_daily_value,
+    liquidity_universe,
+    load_sector_map,
+)
 
 __all__ = [
     "EqualWeightComposite",
@@ -29,7 +34,10 @@ __all__ = [
     "SignalCombiner",
     "WeightedComposite",
     "amihud_illiquidity",
+    "average_daily_value",
     "evaluate_factor_gate",
+    "liquidity_universe",
+    "load_sector_map",
     "low_volatility",
     "momentum_12_1",
     "residual_momentum",
