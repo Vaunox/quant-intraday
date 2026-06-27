@@ -27,6 +27,12 @@ from quant.research.mechanisms.index_rebalance import (
     evaluate_index_rebalance,
     load_reconstitution_events,
 )
+from quant.research.mechanisms.pairs import (
+    CointegrationPairsSpec,
+    PairModel,
+    log_price_panel,
+    select_cointegrated_pairs,
+)
 from quant.research.mechanisms.preregistration import (
     CommittedPreregistration,
     Preregistration,
@@ -52,12 +58,14 @@ from quant.research.mechanisms.trials import (
 )
 
 __all__ = [
+    "CointegrationPairsSpec",
     "CommittedPreregistration",
     "IndexRebalanceSpec",
     "MechanismDataError",
     "MechanismError",
     "MechanismEvaluation",
     "MlflowTrialCountSource",
+    "PairModel",
     "Preregistration",
     "PreregistrationError",
     "ReconstitutionEvent",
@@ -73,9 +81,11 @@ __all__ = [
     "evaluate_spec_under_cpcv",
     "load_preregistration",
     "load_reconstitution_events",
+    "log_price_panel",
     "mechanism_kill_gate_evidence",
     "parse_preregistration",
     "require_preregistration",
+    "select_cointegrated_pairs",
     "spec_backtest_fn",
     "validate_spec_timeline",
 ]

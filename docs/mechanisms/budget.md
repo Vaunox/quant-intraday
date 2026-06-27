@@ -44,5 +44,6 @@ price-only mechanism (P7.2 pairs) is fully runnable on real data.
 | Mechanism | Cycle | Status | Cumulative trials | Verdict |
 |---|---|---|---|---|
 | P7.1 index-rebalance | 1 | done | 0 | **DATA-GATED** (no reconstitution change-log) → route to P7.2 |
-| P7.2 cointegration pairs | 2 (conditional) | in progress | — | — |
-| P7.3 PEAD | 3 (conditional) | — | — | — |
+| P7.2 cointegration pairs | 2 (conditional) | done | 5 | **KILL** (+0.425 net Sharpe — strongest edge found, but < +1.0 bar and not significant, t=1.20) → route to P7.3 |
+| P7.3 PEAD | 3 (conditional) | in progress | — | — |
+| **Cumulative** | — | — | **5 / 40** | — |
