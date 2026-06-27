@@ -329,6 +329,37 @@ the kill-gate did its job; the budget held; nothing fooled itself.
 
 ---
 
+## 8. Part VI addendum — the mechanical-edge program (2026-06-27)
+
+After this close-out, a **second research arc** was opened (blueprint Part VI): the thesis that
+retail alpha comes from **non-directional mechanical edges** (structural flows, statistical
+relationships, event mechanics), judged by the **same** seven-point kill-gate. The validation
+engine was reused, not rebuilt.
+
+- **Harness (GATE 6 ☑).** A `StrategySpec` layer (`research/mechanisms/`) plugs any mechanism into
+  the unchanged CPCV + kill-gate; the DSR trial count is pulled **automatically** from the live
+  cumulative MLflow run count (the structural fix for §4.1 cause (b) — N can never be hard-coded
+  again); each mechanism is **pre-registered** in git before its first test run.
+- **Mechanism slate (GATE 7 ⊘ honest stop).** Three mechanisms, judged in sequence under a
+  pre-committed budget. **Cointegration pairs** — run on the real survivorship-free panel — is the
+  **strongest edge this entire project has found: +0.425 net annualised Sharpe**, market-neutral,
+  the first to clear the +0.3 continue band. But it is **still real-but-too-weak**: below the +1.0
+  kill-gate bar by ~2.4× and **not statistically significant** (de-dup t = 1.20, p ≈ 0.12 on 95
+  months) — the *same structural finding* as the original program. **Index-rebalance** and **PEAD**
+  are **data-gated** on external feeds the repo lacks (a reconstitution change-log; an
+  earnings-surprise feed) — their machinery is built and tested. No mechanism cleared → honest stop.
+- **Phase 8 (CNC execution) correctly not built** (gated on a research winner; none exists).
+- **Phase 9 proprietary-data recorders built** (live 5-level depth; earnings reaction/drift) — the
+  forward-accrual answer to the data gates, compounding over months.
+
+The mechanical-edge arc confirms and extends the original finding: across **directional prediction
+and three non-directional mechanics**, no edge clears the kill-gate at retail scale — the strongest
+(pairs, +0.42) is real but economically negligible and statistically marginal. The apparatus,
+budget discipline, and intellectual honesty held throughout. Authoritative Part-VI record:
+[`mechanisms/gate7_closeout.md`](mechanisms/gate7_closeout.md). **Still no live trading; $0 risked.**
+
+---
+
 ### Appendix — MLflow run registry (for reproduction)
 
 | What | Experiment | Run-ID | Headline |

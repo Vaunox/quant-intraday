@@ -191,18 +191,23 @@ Pre-committed gate + budget: [`config/factor_default.yaml`](../config/factor_def
 |---|---|---|---|---|---|
 | 2026-06-27 | P7.1 Index-rebalance flow | ◐ data-gated | `feat/p7.1-index-rebalance` | 7 new | Budget committed first (`docs/mechanisms/budget.md`), then the pre-registration (`index_rebalance_prereg.md`), then the code (P6.3 order honored). `research/mechanisms/index_rebalance.py`: `ReconstitutionEvent` + change-log loader + `IndexRebalanceSpec` (market-neutral long-additions/short-deletions, announcement→effective window, net of CNC 0.22%) + `evaluate_index_rebalance` — plugs into the **unchanged** kill-gate. **Verdict: DATA-GATED → does not clear** — the NSE reconstitution change-log the blueprint lists as "already built" is **not in the repo** (only a current membership snapshot); the survivorship-free price panel *is* present. Surfaced per Rule 9 (no fabricated event dates). 0 trials charged. → route to P7.2. See `index_rebalance_verdict.md`. |
 | 2026-06-27 | P7.2 Cointegration pairs / stat-arb *(conditional)* | ☑ done (KILL) | `feat/p7.2-cointegration-pairs` | 7 new | Pre-registration committed before the run. `research/mechanisms/pairs.py`: Engle-Granger `select_cointegrated_pairs` (point-in-time trailing formation) + `CointegrationPairsSpec` (market-neutral monthly spread-reversion, net of CNC 0.22%). Ran on the **real** survivorship-free panel (20 liquid large-caps, 2016–2024, `scripts/run_p7_pairs.py`), 5 config variants = 5 trials. **Verdict: KILL** — best **+0.425 net annualised Sharpe** (gross +0.470; profit factor 1.72): the **strongest mechanical edge found**, first to clear the +0.3 continue band, but **< the +1.0 bar (~2.4×) and not significant** (de-dup t=1.20, p≈0.12; DSR 1.000 is the path-concat-inflated convention). Honest caveat: CPCV path distribution is **degenerate for rule-based specs** (φ identical paths) — OOS validity from point-in-time construction, significance from the de-dup t-stat. → route to P7.3. See `cointegration_pairs_verdict.md`. |
-| | P7.3 Event-driven / PEAD *(conditional)* | ☐ todo | | | Pursued only if P7.1/P7.2 KILL; ideally consumes P9.2 event data. |
-| | **GATE 7 (Part VI)** | ☐ | | | A mechanism clears the kill-gate (→ Phase 8) **or** the budget's stop criterion engages with all mechanisms killed (honest stop, Rule 7). |
+| 2026-06-27 | P7.3 Event-driven / PEAD *(conditional)* | ◐ data-gated | `feat/p7.3-gate7-closeout` | 5 new | Pre-registration committed before the code. `research/mechanisms/pead.py`: `PeadSpec` over the P9.2 `EventReactionRecord` dataset (`sign(surprise)·drift_return` net of CNC 0.22%) — plugs into the **unchanged** kill-gate. **Verdict: DATA-GATED** — needs an external earnings-surprise feed (not in the repo); the P9.2 recorder + spec are built+tested but the store is empty. 0 trials. See `pead_verdict.md`. |
+| 2026-06-27 | **GATE 7 (Part VI)** | ⊘ **honest stop** (tag `part-vi-gate-7-stop`) | `feat/p7.3-gate7-closeout` | | **No mechanism cleared the kill-gate within the cycle cap (3).** Pairs KILLed on real data (strongest edge found, +0.425 net Sharpe, still too weak); index-rebalance + PEAD data-gated on external feeds the repo lacks. Cumulative trials 5/40. Per `budget.md` → the mechanical-edge program **STOPS** (successful Inviolable-Rule-7 outcome). See `gate7_closeout.md`. |
 
-## Phase 8 — CNC Execution Layer *(deferred Stage-2; built only if GATE 7 passes)*
+## Phase 8 — CNC Execution Layer *(deferred Stage-2; built only if GATE 7 passes — NOT reached)*
+
+> **Not built.** GATE 7 is an honest stop (no Phase-7 mechanism cleared), so Phase 8 is correctly
+> **not undertaken** — the same "Stage 2 correctly not undertaken until a research winner exists"
+> discipline as the original program (`FINDINGS.md` §6). The plan below remains on the shelf, ready
+> if a future mechanism clears GATE 7.
 
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
-| | P8.1 CNC mode in the realistic backtester | ☐ todo | | | Multi-day holds, no forced 15:20 square-off; MIS path byte-for-byte unchanged. |
-| | P8.2 CNC mode in the reconciliation engines | ☐ todo | | | |
-| | P8.3 CNC delivery cost model (gated, replacing the 0.22% scalar) | ☐ todo | | | Itemised CNC cost from first principles (0.10% STT both legs + stamp + exch/SEBI/GST). |
-| | P8.4 End-to-end CNC validation through the kill-gate | ☐ todo | | | |
-| | **GATE 8 (Part VI)** | ☐ | | | The Phase-7 winner survives the full CNC execution layer through the kill-gate. |
+| | P8.1 CNC mode in the realistic backtester | ☐ gated (unreachable) | | | Multi-day holds, no forced 15:20 square-off; MIS path byte-for-byte unchanged. |
+| | P8.2 CNC mode in the reconciliation engines | ☐ gated (unreachable) | | | |
+| | P8.3 CNC delivery cost model (gated, replacing the 0.22% scalar) | ☐ gated (unreachable) | | | Itemised CNC cost from first principles (0.10% STT both legs + stamp + exch/SEBI/GST). |
+| | P8.4 End-to-end CNC validation through the kill-gate | ☐ gated (unreachable) | | | |
+| | **GATE 8 (Part VI)** | ☐ unreachable | | | Gated on a GATE-7 winner; none exists. |
 
 ## Phase 9 — Proprietary Data Accrual *(runs in parallel; ongoing — no terminal gate)*
 
@@ -212,7 +217,7 @@ Pre-committed gate + budget: [`config/factor_default.yaml`](../config/factor_def
 | 2026-06-27 | P9.2 Systematic event-reaction recording | ☑ recorder built | `feat/p9-data-recorders` | 6 new | `data/recorders/events.py`: `EarningsEvent` (surprise) + `EventReactionRecorder` (reads the P1.3 archive, computes pre/reaction/drift windows point-in-time) + `ParquetEventReactionStore` (research-queryable, idempotent). Schema = exactly what the P7.3 PEAD spec consumes. **Code complete + tested; needs an earnings-calendar/surprise feed (external) to populate.** |
 | | **GATE 9 (Part VI)** | ☐ ongoing | | | Datasets accrue + are research-queryable; sufficiency judged by the studies that consume them. |
 
-**Part-VI gate status:** Gate 6 ☑ · Gate 7 ☐ · Gate 8 ☐ · Gate 9 ☐ (ongoing). **Rules in force:** every Part I Engineering Ground Rule + Inviolable Rule — above all Rule 1 (kill-gate sacred), Rule 4 (honest cost modeling), honest cumulative trial counting (P6.2), and Rule 7 (an honest negative is a successful outcome).
+**Part-VI gate status:** Gate 6 ☑ (harness) · Gate 7 ⊘ **honest stop** (no mechanism cleared; pairs the strongest at +0.425 net Sharpe, still too weak; index-rebalance + PEAD data-gated) · Gate 8 ☐ unreachable (gated on a GATE-7 winner) · Gate 9 ☐ ongoing (depth + event recorders built; accrual perpetual). **Part VI is complete to its honest end state:** the harness is built and proven, all three pre-committed mechanisms judged (one on real data → KILL, two data-gated), the proprietary-data recorders that unblock the gated mechanisms are built, and the kill-gate held. **No live trading; $0 risked.** **Rules in force:** every Part I Engineering Ground Rule + Inviolable Rule — above all Rule 1 (kill-gate sacred), Rule 4 (honest cost modeling), honest cumulative trial counting (P6.2), and Rule 7 (an honest negative is a successful outcome).
 
 ---
 
@@ -2146,3 +2151,56 @@ into `Config` as a defaulted section; loads clean.
 
 **Next subtask: Part VI / P7.1 — Index-rebalance flow** (blocked on the operator's Phase-7 budget
 + a committed pre-registration).
+
+---
+
+### 2026-06-27 — Part VI / Phase 7–9 — Mechanism studies → GATE 7 honest stop ⊘
+
+Drove Part VI from the GATE-6 harness through the full mechanism-study slate to its honest end
+state. Committed a Phase-7 budget first (`docs/mechanisms/budget.md`; cycle cap 3, trial cap 40,
+smoke stop +0.3, program-stop = honest negative), then judged the three pre-committed mechanisms in
+sequence — each pre-registered in git **before** its code (P6.3 order honored and auditable).
+
+**P7.2 cointegration pairs — KILL on real data (the headline).** The one mechanism judgeable on
+data we have. `research/mechanisms/pairs.py`: point-in-time trailing Engle-Granger selection +
+market-neutral monthly spread-reversion, net of the honest CNC 0.22%. Run on the survivorship-free
+panel (20 liquid large-caps, 2016–2024; `scripts/run_p7_pairs.py`, 5 variants = 5 trials). Best
+**+0.425 net annualised Sharpe** (gross +0.470, profit factor 1.72) — **the strongest mechanical
+edge this whole project has found** and the first to clear the +0.3 continue band — but **below the
++1.0 kill-gate bar by ~2.4× and not statistically significant** (de-dup t = 1.20, p ≈ 0.12 on 95
+months; DSR 1.000 is the path-concat-inflated convention). KILL. Same structural finding as the
+original program.
+
+**P7.1 index-rebalance + P7.3 PEAD — data-gated.** Both machineries built + tested
+(`index_rebalance.py`, `pead.py`), both blocked on **external feeds the repo lacks** (an NSE
+reconstitution change-log; an earnings-surprise feed). Surfaced per Ground Rule 9 — event dates
+were **not** fabricated. 0 trials each.
+
+**GATE 7 ⊘ honest stop.** No mechanism cleared within the cycle cap → the budget's program-stop
+engaged → the mechanical-edge program stops (a successful Inviolable-Rule-7 outcome).
+`docs/mechanisms/gate7_closeout.md` is the authoritative Part-VI record; `FINDINGS.md` §8 the
+addendum.
+
+**Phase 8 (CNC execution) correctly NOT built** — gated on a GATE-7 winner; none exists (the same
+"Stage 2 not undertaken until a research winner exists" discipline as the original program).
+
+**Phase 9 recorders built (ongoing, no terminal gate).** `data/recorders/`: `DepthRecorder` +
+`DepthSnapshotArchive` (P9.1, live 5-level depth) and `EventReactionRecorder` +
+`ParquetEventReactionStore` (P9.2, earnings reaction/drift). These forward-accrue exactly the data
+that unblocks the two data-gated mechanisms — the structural answer to buying it (impossible at
+retail, Cycle 3b). Accrual is perpetual by design.
+
+**Design decisions (Ground Rule 9, surfaced):**
+- **CPCV degenerates to the full-sample Sharpe for rule-based specs.** P7.x mechanisms precompute
+  split-independent per-period returns, so CPCV reconstructs φ identical paths (measured std =
+  1.4e-17). The OOS validity comes from the **point-in-time construction**, the significance from
+  the **de-dup t-stat** — not from CPCV path variance. Documented in the pairs verdict; the kill-gate
+  criterion 1 still reads the (full-sample) Sharpe correctly.
+- **Honesty over the goal.** Two mechanisms are genuinely data-gated; rather than fabricate feeds to
+  manufacture a verdict, the gates are surfaced and the Phase-9 recorders built as the real unblock.
+
+**Part VI is complete to its honest end state.** Tag `part-vi-gate-7-stop`. No live trading; $0 risked.
+
+**Next:** Part VI re-opens only with the gated data (a reconstitution change-log, an earnings feed),
+accrued live depth, or a newly-defined mechanism (pre-register under a fresh budget; plug a new
+`StrategySpec` into the unchanged kill-gate).
