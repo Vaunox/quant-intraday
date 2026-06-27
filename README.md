@@ -6,16 +6,26 @@ validated rigorously against overfitting, sized conservatively under hard, un-ov
 risk limits, executed via the Zerodha Kite Connect API, monitored for drift, and
 controllable from a secure mobile master-control app.
 
-> **Status: research arc CLOSED — no live trading.** The data + feature + model + validation
-> apparatus is built, gated, and sound (Gate 0 ✅, Gate 1 ✅). No candidate strategy cleared the
-> seven-point kill-gate net of realistic costs: the honest ceiling of the edge in this family is
-> **≈ +0.148 annualised CPCV path-Sharpe — real but too small to trade at retail.** The program
-> closes at this finding, on a pre-committed budget, $0 of capital risked — a successful
+> **Status: PROJECT CLOSED — no live trading, $0 of capital risked.** The data + feature + model +
+> validation apparatus is built, gated, and sound (Gate 0 ✅, Gate 1 ✅). **Three research arcs were
+> each tested to an honest end and none cleared the seven-point kill-gate net of realistic costs:**
+>
+> | Arc | Thesis | Verdict | Strongest honest result |
+> |---|---|---|---|
+> | **I. MIS-directional** (Parts I–V) | ML-predicted intraday direction from bar features | **KILL** | +0.148 ann CPCV path-Sharpe — real but too small |
+> | **II. Mechanical-edge** (Part VI) | non-directional flow / stat-arb / event mechanics | **GATE 7 honest stop** | cointegration pairs **+0.425** net Sharpe — strongest edge found, still < +1.0 bar & insignificant; index-rebalance + PEAD data-gated |
+> | **III. Cross-sectional factors** (Phase 3X) | monthly multi-factor, benchmark-relative IR | **KILL** | composite IC +0.051; active IR −0.82; K-Means cluster A/B **marginal +0.09**, still KILL |
+>
+> Across directional prediction, three non-directional mechanics, **and** cross-sectional factors,
+> **no strategy is tradeable at retail scale** — the strongest edge anywhere (pairs, +0.42 Sharpe)
+> is real but economically negligible and statistically marginal. Every arc closed on a
+> pre-committed budget; the kill-gate held; nothing fooled itself. A successful
 > intellectual-honesty outcome, not a failure.
 >
-> **→ Read [`docs/FINDINGS.md`](docs/FINDINGS.md)** — the authoritative close-out: what we built,
-> what we found, why the kill-gate was never passed, and the honest ceiling of the edge (with
-> MLflow run-IDs and exact numbers). See [`docs/PROGRESS.md`](docs/PROGRESS.md) for the full build log.
+> **→ Read [`docs/FINDINGS.md`](docs/FINDINGS.md)** — the authoritative close-out for all three arcs
+> (with MLflow run-IDs and exact numbers). Part-VI detail: [`docs/mechanisms/gate7_closeout.md`](docs/mechanisms/gate7_closeout.md).
+> Factor A/B: [`docs/iteration_log/p3x_cycle2_cluster_combiner.md`](docs/iteration_log/p3x_cycle2_cluster_combiner.md).
+> Full build log: [`docs/PROGRESS.md`](docs/PROGRESS.md).
 
 > **Reality check.** Over 90% of retail F&O traders lose money. "High stable profit" is
 > not a goal and is not promised. The achievable target is a positive-expectancy,
@@ -89,8 +99,9 @@ quant-intraday/
 │   └── env/            #   dev / paper / live overrides
 ├── src/quant/          # the system, organised by layer:
 │   ├── core/           #   shared domain types, interfaces, config, logging, calendar
-│   ├── data/           #   Layer 1 — brokers, ingest, store, hygiene, features
-│   ├── research/       #   Layer 2 — labeling, models, validation, reports
+│   ├── data/           #   Layer 1 — brokers, ingest, store, hygiene, features, recorders (P9)
+│   ├── research/       #   Layer 2 — labeling, models, validation, reports,
+│   │                   #     factors (Phase 3X), mechanisms (Part VI mechanical-edge harness)
 │   ├── capital/        #   Layer 3 — combine, portfolio, sizing, risk
 │   ├── execution/      #   Layer 4 — oms, router, reconcile, safety, shortfall
 │   ├── ops/            #   Layer 5 — scheduler, monitor, attribution, drift, mlops, platform
