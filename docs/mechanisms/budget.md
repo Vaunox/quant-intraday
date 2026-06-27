@@ -45,5 +45,10 @@ price-only mechanism (P7.2 pairs) is fully runnable on real data.
 |---|---|---|---|---|
 | P7.1 index-rebalance | 1 | done | 0 | **DATA-GATED** (no reconstitution change-log) → route to P7.2 |
 | P7.2 cointegration pairs | 2 (conditional) | done | 5 | **KILL** (+0.425 net Sharpe — strongest edge found, but < +1.0 bar and not significant, t=1.20) → route to P7.3 |
-| P7.3 PEAD | 3 (conditional) | in progress | — | — |
-| **Cumulative** | — | — | **5 / 40** | — |
+| P7.3 PEAD | 3 (conditional) | done | 0 | **DATA-GATED** (no earnings-surprise feed) → slate exhausted |
+| **Cumulative** | — | — | **5 / 40** | **PROGRAM STOP** — cycle cap (3) reached, no mechanism cleared → GATE 7 honest stop (Rule 7) |
+
+> **PROGRAM STOP (GATE 7 honest stop).** All three pre-committed mechanisms judged: pairs KILLed on
+> real data (strongest edge found, still too weak); index-rebalance and PEAD data-gated on external
+> feeds the repo lacks. No mechanism cleared the kill-gate within the cycle cap. Per this budget the
+> mechanical-edge program **stops** — a successful Inviolable-Rule-7 outcome. See `gate7_closeout.md`.

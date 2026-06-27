@@ -33,6 +33,7 @@ from quant.research.mechanisms.pairs import (
     log_price_panel,
     select_cointegrated_pairs,
 )
+from quant.research.mechanisms.pead import PeadSpec
 from quant.research.mechanisms.preregistration import (
     CommittedPreregistration,
     Preregistration,
@@ -66,6 +67,7 @@ __all__ = [
     "MechanismEvaluation",
     "MlflowTrialCountSource",
     "PairModel",
+    "PeadSpec",
     "Preregistration",
     "PreregistrationError",
     "ReconstitutionEvent",
