@@ -476,6 +476,28 @@ class KillGateConfig(_Section):
     regime_min_observations: int = Field(default=20, gt=0)
 
 
+class MechanismsConfig(_Section):
+    """Mechanical-edge research-harness parameters (Part VI / Phase 6).
+
+    The harness lets non-directional / event-driven strategies plug into the *existing*
+    CPCV + kill-gate engine (P6.1) and enforces the two disciplines the original program
+    learned the hard way: an **honest, cumulative** Deflated-Sharpe trial count (P6.2) and
+    a **pre-registration** committed before any test code (P6.3).
+
+    ``experiment_names`` is the set of MLflow experiments whose cumulative run count *is* the
+    honest ``N`` fed to the DSR — never a hard-coded literal again (the direct fix for
+    ``FINDINGS.md`` §4.1 cause (b), where a hard-coded ``N=5`` deflated to an honest ``N=23``).
+    ``prereg_dir`` is where ``<mechanism>_prereg.md`` files live; it is config, not a literal,
+    so the protocol's location is a setting (Ground Rule 2).
+    """
+
+    # The MLflow experiments whose cumulative run count forms the honest DSR trial count N.
+    # Every variant ever run — including discarded ones — is one run here (P6.2).
+    experiment_names: tuple[str, ...] = Field(default=("mechanical-edge",), min_length=1)
+    # Directory (repo-relative) holding the per-mechanism pre-registration docs (P6.3).
+    prereg_dir: str = "docs/mechanisms"
+
+
 class LoggingConfig(_Section):
     """Logging configuration (the logger itself is wired up in P0.3)."""
 
@@ -511,6 +533,8 @@ class Config(_Section):
     robustness: RobustnessConfig = Field(default_factory=RobustnessConfig)
     # Defaulted likewise: the P2.9 seven-point kill-gate thresholds (default.yaml documents them).
     kill_gate: KillGateConfig = Field(default_factory=KillGateConfig)
+    # Defaulted likewise: the Part-VI mechanical-edge harness knobs (default.yaml documents them).
+    mechanisms: MechanismsConfig = Field(default_factory=MechanismsConfig)
     logging: LoggingConfig
 
 

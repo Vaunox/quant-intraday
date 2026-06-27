@@ -1470,7 +1470,7 @@ Slow-accruing inputs that change the pipeline's inputs from **commodity to propr
 | **8** CNC Execution Layer | complete the multi-day execution path for a cleared mechanism | GATE 7 | CNC backtester + reconciliation + gated CNC cost model + end-to-end kill-gate | winner survives the full CNC path through the kill-gate — GATE 8 | FINDINGS §4.1(a), §6; Rule 4 |
 | **9** Proprietary Data Accrual | accrue proprietary depth + event-reaction data over months | P1.2 / P1.3 stream + archive | live-depth recorder + event-reaction recorder | datasets accrue + are research-queryable (ongoing) — GATE 9 | FINDINGS §6; `cycle-3b_decision.md` |
 
-**Part-VI gate status:** Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐ · Gate 9 ☐ (ongoing) — *all todo; blueprint authoring only, no implementation started.*
+**Part-VI gate status:** Gate 6 ☑ (**passed** 2026-06-27) · Gate 7 ☐ · Gate 8 ☐ · Gate 9 ☐ (ongoing) — *Phase 6 harness built (`research/mechanisms/`: spec layer + cumulative-N DSR wiring + pre-registration protocol; 33 tests, mypy strict clean). Phase 7 blocked on the operator's written budget (`docs/mechanisms/budget.md`) + a committed pre-registration; Phases 8–9 unstarted. See `docs/PROGRESS.md`.*
 
 **Rules in force for all Part-VI work:** every Part I Engineering Ground Rule and Project-Specific Inviolable Rule applies unchanged — above all **Rule 1 (kill-gate sacred)**, **Rule 4 (honest cost modeling)**, **honest cumulative trial counting (P6.2)**, and **Rule 7 (most candidates die at the gate; an honest negative is a successful outcome).**
 

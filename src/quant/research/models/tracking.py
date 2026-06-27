@@ -144,8 +144,31 @@ class MLflowExperimentTracker:
         _logger.info("mlflow run logged", extra={"run_name": record.run_name})
 
 
+def import_mlflow() -> Any:
+    """The single, lazy ``mlflow`` import site for the whole project (Ground Rule 1 confinement).
+
+    MLflow is referenced **only** within ``research/models/`` (enforced by
+    ``tests/unit/test_models_confinement.py``); every other layer that needs the cumulative run
+    count or the tracker — including the Part-VI mechanical-edge harness — goes through this
+    helper rather than importing ``mlflow`` itself, so the confinement stays a single seam.
+
+    Raises:
+        ModelDependencyError: If ``mlflow`` is not installed (it is optional; install it in a
+            ``pandas<3`` environment, or use the in-memory defaults).
+    """
+    try:
+        import mlflow
+    except ImportError as exc:
+        raise ModelDependencyError(
+            "MLflow is not installed. It is an optional experiment-tracking backend that "
+            "pins pandas<3 (like ArcticDB); install it in a pandas<3 environment, e.g. "
+            "`pip install mlflow`, or use InMemoryExperimentTracker (the default)."
+        ) from exc
+    return mlflow
+
+
 def create_mlflow_tracker(experiment: str) -> MLflowExperimentTracker:
-    """Build an :class:`MLflowExperimentTracker` — the single, lazy ``mlflow`` import site.
+    """Build an :class:`MLflowExperimentTracker` bound to the confined ``mlflow`` module.
 
     Args:
         experiment: The MLflow experiment name to log runs under.
@@ -157,14 +180,6 @@ def create_mlflow_tracker(experiment: str) -> MLflowExperimentTracker:
         ModelDependencyError: If ``mlflow`` is not installed (it is optional; install it in
             a ``pandas<3`` environment, or use :class:`InMemoryExperimentTracker`).
     """
-    try:
-        import mlflow
-    except ImportError as exc:
-        raise ModelDependencyError(
-            "MLflow is not installed. It is an optional experiment-tracking backend that "
-            "pins pandas<3 (like ArcticDB); install it in a pandas<3 environment, e.g. "
-            "`pip install mlflow`, or use InMemoryExperimentTracker (the default)."
-        ) from exc
     return MLflowExperimentTracker(  # pragma: no cover - reached only with mlflow installed
-        cast(MLflowModule, mlflow), experiment=experiment
+        cast(MLflowModule, import_mlflow()), experiment=experiment
     )
