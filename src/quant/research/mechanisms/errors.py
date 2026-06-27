@@ -27,6 +27,15 @@ class TrialCountError(MechanismError):
     """
 
 
+class MechanismDataError(MechanismError):
+    """A mechanism's input data is missing or insufficient to judge it (a real data gate).
+
+    For example the NSE reconstitution change-log P7.1 needs is absent, or an event references a
+    symbol with no price history in the panel. Distinct from :class:`SpecError` (a malformed spec)
+    — this names an *external data-access* constraint (the Cycle-3b pattern), not a code bug.
+    """
+
+
 class PreregistrationError(MechanismError):
     """A mechanism pre-registration is missing, malformed, or not yet committed (P6.3).
 

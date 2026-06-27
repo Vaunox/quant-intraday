@@ -15,10 +15,17 @@ the validation engine is *reused, not rebuilt* (Part VI mandate). Three pieces:
 """
 
 from quant.research.mechanisms.errors import (
+    MechanismDataError,
     MechanismError,
     PreregistrationError,
     SpecError,
     TrialCountError,
+)
+from quant.research.mechanisms.index_rebalance import (
+    IndexRebalanceSpec,
+    ReconstitutionEvent,
+    evaluate_index_rebalance,
+    load_reconstitution_events,
 )
 from quant.research.mechanisms.preregistration import (
     CommittedPreregistration,
@@ -46,11 +53,14 @@ from quant.research.mechanisms.trials import (
 
 __all__ = [
     "CommittedPreregistration",
+    "IndexRebalanceSpec",
+    "MechanismDataError",
     "MechanismError",
     "MechanismEvaluation",
     "MlflowTrialCountSource",
     "Preregistration",
     "PreregistrationError",
+    "ReconstitutionEvent",
     "SeriesStrategySpec",
     "SpecError",
     "StrategySpec",
@@ -59,8 +69,10 @@ __all__ = [
     "TrialCountSource",
     "create_mlflow_trial_count_source",
     "deflated_sharpe_auto",
+    "evaluate_index_rebalance",
     "evaluate_spec_under_cpcv",
     "load_preregistration",
+    "load_reconstitution_events",
     "mechanism_kill_gate_evidence",
     "parse_preregistration",
     "require_preregistration",
