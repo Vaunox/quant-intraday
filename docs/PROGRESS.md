@@ -71,7 +71,38 @@ Updated at the end of every session.
 | 2026-06-27 | Cycle 5 · **complete gated pipeline — Stage 1** (8-name validated, honest inputs) | ☑ done | uncommitted — `scripts/run_complete_pipeline.py` + new CNC labeler in `barriers.py`/`triple_barrier.py`/`meta.py`/`config.py` (hold for go) | MLflow exp `p2r-cycle5-complete-pipeline` run **`dcd93454c75e462299030a6cfc65905b`** | Brought the daily/CNC strategy onto the **gated path** + wired all four dormant components. **New: gated labeler CNC mode** (`holding_mode: mis\|cnc`; MIS unchanged, +3 unit tests) — the gated P2.3/P2.5 labelers were MIS-session-clamped (0 labels on daily); CNC unblocks multi-day holds. Features via P1.7 harness + 8 new TA-Lib indicators (leakage suite **53 green** on the actual 21-feature matrix); MetaLabeler bet/no-bet 2nd stage; cross-sectional rank+sector-z; frac-diff (min_ffd, bounded grid) on 5 price-level cols; **honest DSR N=22** (live MLflow count, not 5); **honest CNC cost 0.22%** (0.1% STT ×2 + stamp/exch/GST, not 0.14%). CI **1077 passed**, mypy clean. **RESULT (8 names, ~2.6k obs): DIRECT net ann −0.222 (validated) / −0.206 (yfinance); META −0.285 / −0.024; DSR ≈ 0 — does NOT survive honest inputs.** ① **Data source is NOT the cause:** validated − yfinance = **−0.016 ann** (noise) → the +0.662 was **not a yfinance hygiene/survivorship artifact**. ② Collapse vs +0.662 driven by honest cost + honest N + gated labeler + the **8-name universe** (guts cross-sectional power) — this is the honest-input/gated result, **not** the cross-sectional headline (needs 49 names). Stage 2 (CNC in backtester/reconciliation/cost-model) held pending the 49-name smoke. |
 | 2026-06-27 | Cycle 5 · complete gated pipeline — **49-name (56) honest smoke** (cross-sectional headline) | ☑ done | uncommitted — `scripts/run_complete_pipeline.py` (58-name universe; hold for go) | MLflow exp `p2r-cycle5-complete-pipeline` run **`7397d1cee4c944acb18ac01d36b7e6df`** | Survivorship-aware Nifty-50 union 2021–2026 backfilled via **own Kite→hygiene→Parquet path** (live token seeded; 50 new names daily-native + 8 minute-resampled; **56 usable** — HDFC/TATAMOTORS/LTIM unavailable, all merger/demerger/restructuring cases empirically confirmed, **none collapses** → survivorship intact). Honest CNC **0.22%**, honest **N=23**, gated CNC labeler, all 4 components, ~31.8k pooled events. **RESULT: DIRECT (2p−1) ann −0.156 (val) / −0.196 (yf), DSR 0 — still negative at scale. META (meta-label+cross-sectional) ann +0.148 (val) / +0.154 (yf), all 5 CPCV paths positive, DSR(N=23)=0.967, t=3.71, profit-factor 1.047.** ① **Data source irrelevant again** (val−yf = +0.040 DIRECT / −0.006 META) → +0.662 was never a yfinance hygiene/survivorship artifact. ② **Cross-sectional scale + meta-labeling produces a REAL but ECONOMICALLY NEGLIGIBLE edge**: META −0.285 (8-name) → +0.148 (56-name), statistically significant (DSR pass, all paths +) but **fails kill-gate criterion 1 (Sharpe ≥1.0) by ~7× and criterion 5 (PF ≥1.2)**. Honest ceiling is ~+0.15 Sharpe, not +0.662 (~4.5× inflation = cost 0.14→0.22% + N 5→23 + off-gated inline labeler + selection). DSR caveat: 0.967 on the cycle-5-comparable path-concatenated basis (n×5); de-dup t≈1.66 (marginal). **VERDICT: real signal, far below the bar → close-out per pre-committed bands (+0.148 < +0.3 stop). Stage 2 NOT justified** (realistic execution can only shrink +0.15, never clear +1.0). |
 
+## Phase 3X — Cross-Sectional Multi-Factor Equity (Nifty 500, Monthly)
+
+New alpha source re-pointing the apparatus per [`FINDINGS.md`](FINDINGS.md): attack the Phase-2R
+binding constraint via the other Grinold–Kahn axes — frequency (monthly), alpha (cross-sectional
+factors), breadth (Nifty 500, sector-neutral). **Long-only, benchmark-relative; success metric =
+active IR vs Nifty 500 TRI, gate ≥ 0.75.** Spec: [`iteration_log/p3x_spec.md`](iteration_log/p3x_spec.md).
+Pre-committed gate + budget: [`config/factor_default.yaml`](../config/factor_default.yaml).
+
+> **Two facts that shape the plan** (verified against the repo, not the handoff's assumptions):
+> **(i)** Portfolio construction is a **build, not a reuse** — `src/quant/capital/` is empty
+> scaffolding (Phase 3 below is ☐ todo); P3X.7 builds it. **(ii)** The **survivorship data
+> decision is the validity-critical blocker** and runs as a parallel track from day one — Kite
+> cannot serve delisted names and Nifty 500 (unlike Nifty 50) has real collapses; see
+> [`iteration_log/p3x_data_sourcing.md`](iteration_log/p3x_data_sourcing.md). No backtest number
+> is trustworthy until it's settled.
+
+| Date | Subtask | Status | Branch / commit | Notes |
+|---|---|---|---|---|
+| 2026-06-27 | P3X · gate config locked + scaffold | ◐ in-progress | `feat/p3x-cross-sectional-factors` | `config/factor_default.yaml` (§4 seven-point benchmark-relative gate + §2 contract + §5 budget, fixed before any run — Rule 1) + spec + data-track doc. |
+| | P3X.1 Nifty-500 point-in-time universe + backfill | ☐ blocked | | **Gated on the survivorship data decision** (vendor / accept-and-quantify / restricted sub-universe) + operator-provided PIT membership + fresh Kite token. |
+| | P3X.2 Price-only factor library + leakage tests | ◐ next | | `research/factors/`: momentum 12-1, ST reversal, low-vol, residual-mom, Amihud. Built + leakage-tested on synthetic panels (no data dep). |
+| | P3X.3 Cross-sectional forward-return labeling | ☐ todo | | 21-session fwd return + decile rank; replaces triple-barrier. |
+| | P3X.4 Signal combination | ☐ todo | | Baseline = sector-neutral z-score equal-weight (0 params); ML = trial-charged. |
+| | P3X.5 Validation harness adaptation | ☐ todo | | Purge/embargo ≥ 21 sessions; metrics on active return; honest N; de-dup t-stat. |
+| | P3X.6 CNC cost model + monthly backtester | ☐ todo | | CNC 0.22% RT; monthly rebalance, no square-off; two-engine reconcile. |
+| | P3X.7 Portfolio construction + sizing (**build Capital Layer**) | ☐ todo | | Top-quintile → sector caps → inverse-vol/HRP → no-trade band → vol-target. |
+| | P3X.8 Pre-committed gate run (baseline composite) | ☐ todo | | Zero-parameter baseline through the §4 gate on honest CNC cost; verdict → MLflow. |
+
 ## Phase 3 — Capital Layer
+
+> Note: P3X.7 builds the portfolio-construction / risk / sizing modules this phase specifies
+> (the Capital Layer was scaffolded but never implemented). Tracked there for the factor product.
 
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
