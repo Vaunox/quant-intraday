@@ -189,8 +189,8 @@ Pre-committed gate + budget: [`config/factor_default.yaml`](../config/factor_def
 
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
-| | P7.1 Index-rebalance flow | ☐ todo | | | **BLOCKED on an operator decision:** the Phase-7 budget (cycle cap, cumulative trial cap, stop/pivot criteria) must be committed to `docs/mechanisms/budget.md` **before P7.1 begins** (operator-only, mirrors P2R.4), and a pre-registration committed first (P6.3). |
-| | P7.2 Cointegration pairs / stat-arb *(conditional)* | ☐ todo | | | Pursued only if P7.1 KILLs; counts toward the cumulative trial budget. |
+| 2026-06-27 | P7.1 Index-rebalance flow | ◐ data-gated | `feat/p7.1-index-rebalance` | 7 new | Budget committed first (`docs/mechanisms/budget.md`), then the pre-registration (`index_rebalance_prereg.md`), then the code (P6.3 order honored). `research/mechanisms/index_rebalance.py`: `ReconstitutionEvent` + change-log loader + `IndexRebalanceSpec` (market-neutral long-additions/short-deletions, announcement→effective window, net of CNC 0.22%) + `evaluate_index_rebalance` — plugs into the **unchanged** kill-gate. **Verdict: DATA-GATED → does not clear** — the NSE reconstitution change-log the blueprint lists as "already built" is **not in the repo** (only a current membership snapshot); the survivorship-free price panel *is* present. Surfaced per Rule 9 (no fabricated event dates). 0 trials charged. → route to P7.2. See `index_rebalance_verdict.md`. |
+| | P7.2 Cointegration pairs / stat-arb *(conditional)* | ◐ in progress | | | Real-data study on the survivorship-free panel (price-only — fully runnable). |
 | | P7.3 Event-driven / PEAD *(conditional)* | ☐ todo | | | Pursued only if P7.1/P7.2 KILL; ideally consumes P9.2 event data. |
 | | **GATE 7 (Part VI)** | ☐ | | | A mechanism clears the kill-gate (→ Phase 8) **or** the budget's stop criterion engages with all mechanisms killed (honest stop, Rule 7). |
 
