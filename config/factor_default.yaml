@@ -74,6 +74,22 @@ combination:
   scoring: sector_neutral_zscore    # z-score each factor within sector, at each rebalance date
   baseline: equal_weight_composite  # zero free parameters — the candidate that must clear first
   enhancement: ml_ensemble          # LGBM/XGB/logistic to predict P3X.3 rank — TRIAL-CHARGED
+  # P3X.4b A/B variant — K-Means cluster-selection combiner. k and the ex-ante thesis direction
+  # are PRE-COMMITTED here BEFORE any gate run (Inviolable Rule 1), fixed by economic reasoning,
+  # NOT tuned to the sample. Sweeping k or the weights is a multiple-testing search that increments
+  # the honest DSR trial count N and reintroduces the selection bias this module removes — pick
+  # once, live with it (no grid search).
+  cluster_selection:
+    k: 5                            # clusters; 4-6 reasonable for a monthly Nifty-500 cross-section
+    random_state: 7                 # seeded K-Means — reproducible CPCV paths
+    n_init: 10                      # K-Means restarts (stability); fixed, not tuned
+    # The ideal-profile direction w: equal weight on the three IC-positive factors (momentum,
+    # low-vol, residual-momentum — the cycle-1 finding). Reversal/Amihud are excluded (sign-
+    # ambiguous / no illiquidity premium in a liquid top-500), so they carry implicit weight 0.
+    thesis_weights:
+      momentum: 1.0
+      low_vol: 1.0
+      residual_mom: 1.0
 
 costs:
   # CNC delivery round-trip (P3X.6) — NOT the MIS intraday model. Matches a current discount-

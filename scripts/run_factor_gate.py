@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import sys
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -41,6 +42,8 @@ sys.path.insert(0, str(_REPO_ROOT / "src"))
 from quant.capital.portfolio.construction import construct_book
 from quant.core.calendar import IST
 from quant.research.factors import (
+    ClusterCompositeCombiner,
+    ClusterSelectionCombiner,
     EqualWeightComposite,
     FactorGateVerdict,
     GateMetrics,
@@ -49,6 +52,7 @@ from quant.research.factors import (
     liquidity_universe,
     load_sector_map,
 )
+from quant.research.factors.combine import SignalCombiner
 from quant.research.factors.price_factors import (
     amihud_illiquidity,
     low_volatility,
@@ -57,6 +61,7 @@ from quant.research.factors.price_factors import (
     short_term_reversal,
 )
 from quant.research.labeling.cross_sectional import (
+    CrossSectionalLabels,
     build_cross_sectional_labels,
     month_end_rebalance_dates,
 )
@@ -156,8 +161,14 @@ def run_synthetic(use_mlflow: bool = True) -> bool:
     )
 
 
-def run_validated(use_mlflow: bool = True, *, top_n: int = VALIDATED_TOP_N) -> bool:
-    """Run on the real survivorship-free bhavcopy panel over a liquidity-defined top-N universe."""
+def _load_validated_universe(
+    top_n: int,
+) -> tuple[dict[str, pd.DataFrame], dict[str, str], pd.DataFrame, int]:
+    """Load the survivorship-free bhavcopy panel + liquidity top-N universe (the validated inputs).
+
+    Returns ``(bars_by_symbol, sectors, eligibility, ever_eligible_count)`` — the same inputs the
+    baseline and the cluster A/B both consume, so the comparison is on an identical universe.
+    """
     close = pd.read_parquet(_PANEL_DIR / "close.parquet")
     volume = pd.read_parquet(_PANEL_DIR / "volume.parquet")
     value = pd.read_parquet(_PANEL_DIR / "value.parquet")
@@ -189,36 +200,52 @@ def run_validated(use_mlflow: bool = True, *, top_n: int = VALIDATED_TOP_N) -> b
     bars_by_symbol = {
         sym: pd.DataFrame({"close": close[sym], "volume": volume[sym]}) for sym in ever_eligible
     }
+    return bars_by_symbol, sectors, eligibility, len(ever_eligible)
+
+
+def run_validated(use_mlflow: bool = True, *, top_n: int = VALIDATED_TOP_N) -> bool:
+    """Run the baseline composite on the real survivorship-free bhavcopy panel (liquidity top-N)."""
+    bars_by_symbol, sectors, eligibility, ever_eligible = _load_validated_universe(top_n)
     return _run_pipeline(
         bars_by_symbol,
         sectors,
         eligibility=eligibility,
         mode=f"validated-liquidity-top{top_n}",
         use_mlflow=use_mlflow,
-        extra_params={"top_n": float(top_n), "ever_eligible": float(len(ever_eligible))},
+        extra_params={"top_n": float(top_n), "ever_eligible": float(ever_eligible)},
     )
 
 
-def _run_pipeline(
-    bars_by_symbol: dict[str, pd.DataFrame],
-    sectors: dict[str, str],
+@dataclass(frozen=True)
+class ComboResult:
+    """A combiner's full gate outcome — reused by the baseline run and the A/B head-to-head."""
+
+    metrics: GateMetrics
+    verdict: FactorGateVerdict
+    target_weights: pd.DataFrame  # (rebalance x symbol), 0 where not held
+    dedup_tstat: float
+    n_rebalances: int
+
+
+def evaluate_combiner(
+    combiner: SignalCombiner,
     *,
+    factor_panels_at_reb: dict[str, pd.DataFrame],
+    close_panel: pd.DataFrame,
+    labels: CrossSectionalLabels,
+    vol_panel: pd.DataFrame,
     eligibility: pd.DataFrame | None,
-    mode: str,
-    use_mlflow: bool,
-    extra_params: dict[str, float],
-) -> bool:
-    """The shared assembly: factors -> composite -> book -> CNC backtest -> active CPCV -> gate."""
-    close_panel = _panel(bars_by_symbol, "close")
-    market_returns = close_panel.pct_change(fill_method=None).mean(axis=1)  # equal-weight proxy
-    rebalance_dates = month_end_rebalance_dates(pd.DatetimeIndex(close_panel.index))
+    sectors: dict[str, str],
+    n_trials: int,
+) -> ComboResult:
+    """Run ONE combiner through book -> CNC backtest -> active CPCV -> seven-point gate.
 
-    factor_panels = _factor_panels(bars_by_symbol, market_returns)
-    at_reb = {name: panel.reindex(rebalance_dates) for name, panel in factor_panels.items()}
-    composite = EqualWeightComposite(sectors).combine(at_reb)
-
-    labels = build_cross_sectional_labels(close_panel, rebalance_dates, horizon=HORIZON)
-    vol_panel = close_panel.pct_change(fill_method=None).rolling(VOL_WINDOW).std()
+    The combiner is the only thing that varies between the baseline and the cluster A/B arm —
+    everything downstream (universe, costs, CPCV scheme, gate thresholds) is identical, so the
+    comparison is apples-to-apples. ``n_trials`` is the honest DSR trial count (pulled live from
+    the MLflow run count for the cluster arm; never hard-coded).
+    """
+    composite = combiner.combine(factor_panels_at_reb)
     composite_full = composite.reindex(columns=close_panel.columns)
 
     books: dict[pd.Timestamp, pd.Series] = {}
@@ -259,7 +286,7 @@ def _run_pipeline(
     label_times = labels.label_times.loc[reb]
 
     def backtest_fn(train: npt.NDArray[np.intp], test: npt.NDArray[np.intp]) -> pd.Series:
-        # Zero-parameter baseline: the active return per rebalance is precomputed (no fit).
+        # Rule-based combiner: the active return per rebalance is precomputed (no per-fold fit).
         return pd.Series(active_values[test], index=label_times.index[test])
 
     cpcv = CombinatorialPurgedCV(CPCV_GROUPS, CPCV_TEST_GROUPS, embargo_pct=CPCV_EMBARGO)
@@ -268,7 +295,7 @@ def _run_pipeline(
     max_sector_weight = _max_sector_weight(target_weights, sectors)
     metrics = GateMetrics(
         active_ir=evaluation.annualised_ir,
-        dsr=evaluation.deflated_sharpe(n_trials=BASELINE_N_TRIALS),
+        dsr=evaluation.deflated_sharpe(n_trials=n_trials),
         fraction_negative=evaluation.fraction_negative,
         worst_path_ir=evaluation.worst_path_ir,
         pbo=None,  # PBO needs the multi-config panel (computed when ML configs are tried)
@@ -277,16 +304,59 @@ def _run_pipeline(
         robustness_passed=False,  # robustness battery not run in this baseline pass
     )
     verdict = evaluate_factor_gate(metrics, _load_kill_gate())
-
-    print(
-        f"  rebalances: {len(reb)} | universe: {len(close_panel.columns)} | "
-        f"active IR {evaluation.annualised_ir:+.3f} | DSR {metrics.dsr:.3f} | "
-        f"dedup t {evaluation.dedup_tstat:.2f} | max sector wt {max_sector_weight:.3f}"
+    return ComboResult(
+        metrics=metrics,
+        verdict=verdict,
+        target_weights=target_weights,
+        dedup_tstat=evaluation.dedup_tstat,
+        n_rebalances=len(reb),
     )
-    print(verdict.render())
+
+
+def _shared_inputs(
+    bars_by_symbol: dict[str, pd.DataFrame], sectors: dict[str, str]
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame], CrossSectionalLabels, pd.DataFrame]:
+    """The combiner-independent inputs: close panel, factor panels at rebalances, labels, vol."""
+    close_panel = _panel(bars_by_symbol, "close")
+    market_returns = close_panel.pct_change(fill_method=None).mean(axis=1)  # equal-weight proxy
+    rebalance_dates = month_end_rebalance_dates(pd.DatetimeIndex(close_panel.index))
+    factor_panels = _factor_panels(bars_by_symbol, market_returns)
+    at_reb = {name: panel.reindex(rebalance_dates) for name, panel in factor_panels.items()}
+    labels = build_cross_sectional_labels(close_panel, rebalance_dates, horizon=HORIZON)
+    vol_panel = close_panel.pct_change(fill_method=None).rolling(VOL_WINDOW).std()
+    return close_panel, at_reb, labels, vol_panel
+
+
+def _run_pipeline(
+    bars_by_symbol: dict[str, pd.DataFrame],
+    sectors: dict[str, str],
+    *,
+    eligibility: pd.DataFrame | None,
+    mode: str,
+    use_mlflow: bool,
+    extra_params: dict[str, float],
+) -> bool:
+    """The shared assembly: factors -> composite -> book -> CNC backtest -> active CPCV -> gate."""
+    close_panel, at_reb, labels, vol_panel = _shared_inputs(bars_by_symbol, sectors)
+    result = evaluate_combiner(
+        EqualWeightComposite(sectors),
+        factor_panels_at_reb=at_reb,
+        close_panel=close_panel,
+        labels=labels,
+        vol_panel=vol_panel,
+        eligibility=eligibility,
+        sectors=sectors,
+        n_trials=BASELINE_N_TRIALS,
+    )
+    print(
+        f"  rebalances: {result.n_rebalances} | universe: {len(close_panel.columns)} | "
+        f"active IR {result.metrics.active_ir:+.3f} | DSR {result.metrics.dsr:.3f} | "
+        f"dedup t {result.dedup_tstat:.2f} | max sector wt {result.metrics.max_sector_weight:.3f}"
+    )
+    print(result.verdict.render())
     if use_mlflow:
-        _log_mlflow(metrics, verdict, mode=mode, extra_params=extra_params)
-    return verdict.passed
+        _log_mlflow(result.metrics, result.verdict, mode=mode, extra_params=extra_params)
+    return result.verdict.passed
 
 
 def _benchmark_returns(
@@ -334,22 +404,25 @@ def _load_kill_gate() -> dict[str, float]:
     return {k: float(v) for k, v in config["kill_gate"].items() if isinstance(v, int | float)}
 
 
+_MLFLOW_EXPERIMENT = "p3x-factor-gate"
+_MLFLOW_DB = "sqlite:///" + str(_REPO_ROOT / "mlruns" / "mlflow.db").replace("\\", "/")
+
+
 def _log_mlflow(
     metrics: GateMetrics,
     verdict: FactorGateVerdict,
     *,
     mode: str,
     extra_params: dict[str, float],
+    n_trials: int = BASELINE_N_TRIALS,
 ) -> None:
     try:
         import mlflow
 
-        mlflow.set_tracking_uri(
-            "sqlite:///C:/Users/vinay/Documents/quant-intraday/mlruns/mlflow.db"
-        )
-        mlflow.set_experiment("p3x-factor-gate")
+        mlflow.set_tracking_uri(_MLFLOW_DB)
+        mlflow.set_experiment(_MLFLOW_EXPERIMENT)
         with mlflow.start_run(run_name=f"p3x-{mode}") as run:
-            mlflow.log_params({"mode": mode, "n_trials": BASELINE_N_TRIALS, **extra_params})
+            mlflow.log_params({"mode": mode, "n_trials": n_trials, **extra_params})
             mlflow.log_metrics(
                 {
                     "active_ir": metrics.active_ir,
@@ -361,9 +434,142 @@ def _log_mlflow(
                 }
             )
             run_id = run.info.run_id
-        print(f"  logged to MLflow 'p3x-factor-gate' run_id={run_id}")
+        print(f"  logged to MLflow '{_MLFLOW_EXPERIMENT}' run_id={run_id}")
     except Exception as exc:
         print(f"  [WARN] MLflow logging failed: {exc}")
+
+
+def _live_n_trials() -> int:
+    """The honest cumulative DSR trial count = runs already in the factor experiment + 1.
+
+    Pulled **live** from the MLflow run count (never hard-coded — the P6.2 discipline); the ``+1``
+    is this about-to-be-logged cluster run. Falls back to 1 if MLflow is unavailable (logged).
+    """
+    try:
+        import mlflow
+        from mlflow.tracking import MlflowClient
+
+        mlflow.set_tracking_uri(_MLFLOW_DB)
+        client = MlflowClient()
+        experiment = client.get_experiment_by_name(_MLFLOW_EXPERIMENT)
+        existing = (
+            len(client.search_runs([experiment.experiment_id], max_results=10_000))
+            if experiment is not None
+            else 0
+        )
+        print(f"  live MLflow trial count: {existing} existing + 1 (this run) = {existing + 1}")
+        return existing + 1
+    except Exception as exc:
+        print(f"  [WARN] live N from MLflow failed ({exc}); falling back to N=1")
+        return 1
+
+
+def _load_cluster_combiner(sectors: dict[str, str]) -> ClusterCompositeCombiner:
+    """Build the cluster combiner from the PRE-COMMITTED config (k + thesis_weights)."""
+    path = _REPO_ROOT / "config" / "factor_default.yaml"
+    with path.open() as handle:
+        config = yaml.safe_load(handle)
+    cfg = config["combination"]["cluster_selection"]
+    scorer = ClusterSelectionCombiner(
+        k=int(cfg["k"]),
+        thesis_weights={str(k): float(v) for k, v in cfg["thesis_weights"].items()},
+        random_state=int(cfg["random_state"]),
+        n_init=int(cfg["n_init"]),
+    )
+    return ClusterCompositeCombiner(sectors=sectors, scorer=scorer)
+
+
+def _position_overlap(baseline: pd.DataFrame, cluster: pd.DataFrame) -> float:
+    """Mean Jaccard overlap of held names per rebalance (1.0 = identical books every month).
+
+    High overlap means the clustering is just reorganizing the same information the baseline rank
+    already holds; low overlap means it selects genuinely different names.
+    """
+    dates = baseline.index.intersection(cluster.index)
+    overlaps: list[float] = []
+    for date in dates:
+        held_base = set(baseline.columns[baseline.loc[date] > 0.0])
+        held_cluster = set(cluster.columns[cluster.loc[date] > 0.0])
+        union = held_base | held_cluster
+        if union:
+            overlaps.append(len(held_base & held_cluster) / len(union))
+    return float(np.mean(overlaps)) if overlaps else 0.0
+
+
+def _criterion_table(baseline: ComboResult, cluster: ComboResult) -> str:
+    """Render the side-by-side seven-point gate comparison (baseline vs cluster)."""
+    lines = ["| Criterion | Baseline | Cluster |", "|---|---|---|"]
+    for name in baseline.verdict.results:
+        b_ok, b_detail = baseline.verdict.results[name]
+        c_ok, c_detail = cluster.verdict.results[name]
+        lines.append(
+            f"| {name} | {'PASS' if b_ok else 'KILL'} ({b_detail}) | "
+            f"{'PASS' if c_ok else 'KILL'} ({c_detail}) |"
+        )
+    return "\n".join(lines)
+
+
+def run_validated_ab(use_mlflow: bool = True, *, top_n: int = VALIDATED_TOP_N) -> bool:
+    """A/B head-to-head: baseline composite vs cluster-selection, on the identical validated gate.
+
+    Same universe, same CNC costs, same CPCV scheme, same gate thresholds — only the combiner
+    differs. The cluster arm's DSR uses the honest N pulled live from the MLflow run count and is
+    logged as a new run; the position overlap measures how much new information clustering adds.
+    """
+    bars_by_symbol, sectors, eligibility, ever_eligible = _load_validated_universe(top_n)
+    close_panel, at_reb, labels, vol_panel = _shared_inputs(bars_by_symbol, sectors)
+    n_trials = _live_n_trials()  # honest N for the cluster arm (pulled live; never hard-coded)
+
+    baseline = evaluate_combiner(
+        EqualWeightComposite(sectors),
+        factor_panels_at_reb=at_reb,
+        close_panel=close_panel,
+        labels=labels,
+        vol_panel=vol_panel,
+        eligibility=eligibility,
+        sectors=sectors,
+        n_trials=BASELINE_N_TRIALS,
+    )
+    cluster = evaluate_combiner(
+        _load_cluster_combiner(sectors),
+        factor_panels_at_reb=at_reb,
+        close_panel=close_panel,
+        labels=labels,
+        vol_panel=vol_panel,
+        eligibility=eligibility,
+        sectors=sectors,
+        n_trials=n_trials,
+    )
+    overlap = _position_overlap(baseline.target_weights, cluster.target_weights)
+
+    base_v = "PASS" if baseline.verdict.passed else "KILL"
+    cluster_v = "PASS" if cluster.verdict.passed else "KILL"
+    print("\n==== P3X.4b A/B: baseline composite vs cluster-selection ====")
+    print(
+        f"  BASELINE: active IR {baseline.metrics.active_ir:+.3f} | "
+        f"DSR {baseline.metrics.dsr:.3f} | dedup t {baseline.dedup_tstat:+.2f} | {base_v}"
+    )
+    print(
+        f"  CLUSTER : active IR {cluster.metrics.active_ir:+.3f} | DSR {cluster.metrics.dsr:.3f} | "
+        f"dedup t {cluster.dedup_tstat:+.2f} | N={n_trials} | {cluster_v}"
+    )
+    print(f"  position overlap (mean Jaccard of held names): {overlap:.3f}")
+    print(_criterion_table(baseline, cluster))
+
+    if use_mlflow:
+        _log_mlflow(
+            cluster.metrics,
+            cluster.verdict,
+            mode=f"validated-cluster-top{top_n}",
+            extra_params={
+                "top_n": float(top_n),
+                "ever_eligible": float(ever_eligible),
+                "position_overlap": overlap,
+                "baseline_active_ir": baseline.metrics.active_ir,
+            },
+            n_trials=n_trials,
+        )
+    return cluster.verdict.passed
 
 
 def main() -> int:
@@ -376,9 +582,14 @@ def main() -> int:
         help="run on the real survivorship-free bhavcopy panel (requires data/nifty_panel/)",
     )
     parser.add_argument("--top-n", type=int, default=VALIDATED_TOP_N)
+    parser.add_argument(
+        "--ab",
+        action="store_true",
+        help="P3X.4b A/B: baseline composite vs cluster-selection (implies --validated)",
+    )
     args = parser.parse_args()
 
-    if args.validated:
+    if args.validated or args.ab:
         if not (_PANEL_DIR / "close.parquet").exists():
             print(
                 f"VALIDATED run needs the panel at {_PANEL_DIR}. Build it first:\n"
@@ -386,7 +597,10 @@ def main() -> int:
                 "  python scripts/fetch_corporate_actions.py"
             )
             return 2
-        run_validated(use_mlflow=not args.no_mlflow, top_n=args.top_n)
+        if args.ab:
+            run_validated_ab(use_mlflow=not args.no_mlflow, top_n=args.top_n)
+        else:
+            run_validated(use_mlflow=not args.no_mlflow, top_n=args.top_n)
         return 0
 
     run_synthetic(use_mlflow=not args.no_mlflow)
