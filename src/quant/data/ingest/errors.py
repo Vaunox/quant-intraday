@@ -17,3 +17,12 @@ class BackfillCheckpointError(IngestError):
     (so a re-run skips finished symbols). A corrupt file must fail loudly rather than
     be silently ignored, which would re-fetch everything or, worse, skip incorrectly.
     """
+
+
+class BhavcopyError(IngestError):
+    """A daily NSE bhavcopy could not be parsed (unrecognised schema or corrupt zip).
+
+    The two historical bhavcopy layouts (legacy ``cm<DD><MON><YYYY>bhav.csv`` and the
+    2024+ UDiFF file) are auto-detected by header; anything matching neither must fail
+    loudly rather than silently yield an empty universe for that day.
+    """
