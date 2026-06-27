@@ -5,6 +5,10 @@ scoring is applied on top by the P3X.4 combiner. Phase-B fundamental factors are
 pending a point-in-time fundamentals feed.
 """
 
+from quant.research.factors.cluster_selection_combiner import (
+    ClusterCompositeCombiner,
+    ClusterSelectionCombiner,
+)
 from quant.research.factors.combine import (
     EqualWeightComposite,
     SignalCombiner,
@@ -28,6 +32,8 @@ from quant.research.factors.universe import (
 )
 
 __all__ = [
+    "ClusterCompositeCombiner",
+    "ClusterSelectionCombiner",
     "EqualWeightComposite",
     "FactorError",
     "FactorGateVerdict",

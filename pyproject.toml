@@ -23,6 +23,7 @@ dependencies = [
     "statsmodels>=0.14",   # ADF stationarity test for min-d fractional differentiation (P2.5); resolves with pandas 3.x
     "lightgbm>=4.4",       # gradient-boosted baseline classifier (native API), confined to research/models/ (P2.6); no pandas pin
     "xgboost>=2.0",        # second gradient-boosting family for the cross-family ensemble (native API), confined to research/models/ (P2.7); no pandas pin
+    "scikit-learn>=1.4",   # K-Means for the P3X.4b cluster-selection combiner (numpy-based; no pandas pin)
 ]
 
 # Optional storage backends, confined to data/store/ and imported lazily (P1.3).
@@ -153,6 +154,12 @@ ignore_missing_imports = true
 # so it is absent in CI and its lazy use is confined to research/models/tracking.py.
 [[tool.mypy.overrides]]
 module = ["lightgbm.*", "xgboost.*", "mlflow.*"]
+ignore_missing_imports = true
+
+# scikit-learn (K-Means) for the P3X.4b cluster-selection combiner; ships no complete type
+# information for the cluster API, confined to research/factors/cluster_selection_combiner.py.
+[[tool.mypy.overrides]]
+module = ["sklearn.*"]
 ignore_missing_imports = true
 
 # QuantStats (P2.9 tearsheet) is an optional, operator-installed research-env tool, absent in
