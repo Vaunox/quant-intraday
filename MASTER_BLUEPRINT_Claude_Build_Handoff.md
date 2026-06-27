@@ -1313,7 +1313,170 @@ Phase 8 begins with the operator subphase P8A above; the engineering subtasks be
 
 ---
 
-# PART VI — REFERENCE FILES
+# PART VI — MECHANICAL-EDGE RESEARCH PROGRAM
+
+*Added 2026-06-27. A new first-class research arc that succeeds the original MIS-directional program (Parts I–V). The original program is preserved unchanged above as the honest historical record; this Part redirects the research **thesis** forward from that record's close-out. The arc reads: original MIS-directional program (Parts I–V, completed / closed-out) → redirection (Part VI).*
+
+## Why the redirection (the bridge from Parts I–V)
+
+The original program's thesis — that a **directional**, ML-predicted edge could be mined from point-in-time **commodity bar-data features** on liquid Indian equities at retail-accessible frequencies — was tested to honest exhaustion and hit a hard ceiling. [`docs/FINDINGS.md`](docs/FINDINGS.md) records the close-out: the strongest honest candidate (META — cross-sectional + meta-labeling, 56 survivorship-aware names, gated CNC cost, honest cumulative N = 23) reached **+0.148 annualised CPCV path-Sharpe** — real and statistically detectable, but **economically negligible and below the pre-committed +0.3 STOP band** (P2R.4). Three independent model families converged at **OOS AUC ≈ 0.52** (P2A.6), locating the ceiling in the **information content of commodity bar data**, not the algorithm. The directional-prediction thesis is closed: *no tradeable directional edge at retail scale in this strategy family.*
+
+**The new thesis:** retail-accessible alpha comes from **non-directional mechanical edges** — structural flows, statistical relationships, and event mechanics that do not require predicting direction from commodity bar data — **not from directional prediction**. Part VI pursues that thesis with the same discipline and the same apparatus that produced the honest negative.
+
+## What carries over (reuse — do not rebuild)
+
+- **The full validation engine is reused as-is** (Part III Layer 2; `research/validation/`): purged CV + embargo, Combinatorial Purged CV, Deflated Sharpe Ratio, Probability of Backtest Overfitting, the robustness battery, two-engine reconciliation, the Indian cost model, and the **seven-point kill-gate**. Part VI builds *strategies that plug into this judge* — it does **not** re-implement the judge.
+- **All Part I Engineering Ground Rules and Project-Specific Inviolable Rules remain in force** for every Part-VI subtask — especially **Rule 1 (the kill-gate is sacred)**, **Rule 4 (costs are always modeled)**, **honest trial counting**, and **Rule 7 (most candidates die at the gate; an honest negative is a successful outcome).**
+- **The data + hygiene + feature apparatus** (Phase 1; plus the survivorship-correct membership and the survivorship-free NSE-bhavcopy panel built during the program — see `docs/PROGRESS.md`, `docs/FINDINGS.md` §5) is reused for inputs.
+
+## Phase-numbering note (disambiguation)
+
+Part IV's Phases 6–9 (Paper Trading, Control Layer, Live, Operate) are the **original** program's productionization track — planned, never reached (the research arc closed at Phase 2R). Within **Part VI**, "Phase 6–9" and task IDs **P6.x–P9.x refer to the mechanical-edge program** below; cite a Part-VI subtask as e.g. "Part VI / P7.1". The identically-numbered Part IV phases and their gates are left untouched per the historical-record mandate. *(Operator decision flagged, not taken unilaterally: if this dual numbering is undesirable, the alternative is to renumber the Part-VI phases — say the word and it will be changed.)*
+
+---
+
+## PHASE 6 — Mechanical-Edge Research Harness
+
+A thin specification + discipline layer that lets non-directional / event-driven strategies be expressed and judged by the **existing** CPCV / DSR / PBO / kill-gate / robustness engine — plus the trial-count and pre-registration discipline the original program learned the hard way. **The validation engine is reused, not rebuilt.**
+
+#### P6.1 — Non-directional strategy-specification layer
+- **Goal:** a `StrategySpec` interface for non-directional / event-driven strategies that produces the same position/return series the existing validation engine consumes, so any mechanism plugs into CPCV + the kill-gate without bespoke plumbing.
+- **Depends on:** Part III Layer 2 (`research/validation/`); the existing CPCV / active-return harness.
+- **Deliverable:** `research/mechanisms/` — a `StrategySpec` Protocol (event / entry / exit / holding / weight) + an adapter that turns a spec's per-period returns into the `backtest_fn` the CPCV engine already takes. **No change to the validation engine.**
+- **Done when:** a trivial reference spec runs end-to-end through the existing CPCV + kill-gate on synthetic data; the engine is untouched; tested.
+- **Reference:** Part III Layer 2; `docs/FINDINGS.md` §1 (apparatus inventory).
+
+#### P6.2 — Honest cumulative trial-count wiring (DSR auto-deflation)
+- **Goal:** make the Deflated Sharpe trial count **automatic and cumulative across every variant ever run — including discarded ones** — so DSR can never again be computed against a hard-coded N.
+- **Depends on:** P6.1; the MLflow research env (P2A.4).
+- **Deliverable:** a trial-count source that reads the cumulative MLflow run count across the mechanical-edge experiments and feeds it to DSR automatically; the hard-coded-N path is removed and forbidden at the call site.
+- **Done when:** DSR in any Part-VI run pulls N from the live cumulative count (verified against a known multi-run MLflow state); a test asserts no caller passes a literal N. **This is the direct fix for `FINDINGS.md` §4.1 cause (b)** — hard-coded N = 5 deflated to honest N = 23. It must never be hard-coded again.
+- **Reference:** `docs/FINDINGS.md` §4.1; Part I Inviolable Rule 7; P2R.2 trial-count guardrail.
+
+#### P6.3 — Pre-registration protocol
+- **Goal:** each mechanism's hypothesis is written and committed to git **before** it is tested, so both the reasoning and the trial count are honest from the start.
+- **Depends on:** P6.1.
+- **Deliverable:** a pre-registration template + a `docs/mechanisms/<mechanism>_prereg.md` workflow — hypothesis, economic rationale, pre-committed success / kill thresholds, and the planned trial budget — committed before any code that tests the mechanism.
+- **Done when:** the protocol is documented; a mechanism cannot enter Phase 7 without a committed pre-registration whose commit **precedes** its first test run (auditable in git history).
+- **Reference:** Part I Inviolable Rule 7; P2R.4 (pre-committed bands).
+
+**GATE 6 (Part VI):** a non-directional spec runs through the unchanged kill-gate, DSR auto-deflates from the live cumulative trial count, and the pre-registration protocol is in force. The harness is ready; no mechanism judged yet.
+
+---
+
+## PHASE 7 — Mechanism Studies
+
+One sub-phase per mechanism, **tested in sequence, not in parallel.** Each is a bounded study: form the pre-registered hypothesis (P6.3), build the minimal `StrategySpec` (P6.1), run it through the **existing** seven-point kill-gate, record the verdict, and **stop or proceed** under the Phase-7 budget. Every variant — including discarded ones — counts toward the cumulative trial budget (P6.2).
+
+#### P7.1 — Index-rebalance flow
+- **Goal:** capture the mechanical, pre-announced passive-fund flows around NSE index semi-annual reviews (additions bid up, deletions sold off by index-tracking funds on a known schedule).
+- **Depends on:** GATE 6; the survivorship-correct membership data already built (`ConstituentRegistry`, P1.5; the NSE reconstitution change-log and survivorship-free bhavcopy panel from the data work — `docs/PROGRESS.md`).
+- **Deliverable:** a `StrategySpec` for the rebalance event (entry on announcement, exit around the effective date), judged through the kill-gate on the survivorship-correct universe; verdict in `docs/mechanisms/p7.1_index_rebalance_verdict.md`.
+- **Done when:** the kill-gate report exists with a PASS / KILL verdict on cost-inclusive data; the pre-registration was committed first; the trial count is logged.
+- **Reference:** `docs/FINDINGS.md` §5 (survivorship apparatus); reused membership data; Part III Layer 2.
+
+#### P7.2 — Cointegration pairs / statistical arbitrage *(conditional)*
+- **Goal:** market-neutral spread mean-reversion on genuinely **cointegrated** pairs (not mere correlation).
+- **Depends on:** GATE 6; **pursued only if P7.1 does not clear.**
+- **Deliverable:** a pairs `StrategySpec` with a pre-committed cointegration test (e.g. Engle-Granger / Johansen, the in-sample selection charged to the trial count), market-neutral spread entry/exit, judged through the kill-gate; verdict doc.
+- **Done when:** the kill-gate verdict is recorded on cost-inclusive data; the cointegration selection is counted toward the trial budget; the pre-registration was committed first.
+- **Reference:** Part III Layer 2; P6.2 (trial count); P6.3 (pre-reg).
+
+#### P7.3 — Event-driven / post-earnings-announcement drift *(conditional)*
+- **Goal:** systematic capture of the reaction-and-drift around earnings surprises (PEAD).
+- **Depends on:** GATE 6; **pursued only if P7.1 / P7.2 do not clear**; ideally consumes the event-reaction data accrued by P9.2.
+- **Deliverable:** a PEAD `StrategySpec` (surprise → reaction → drift window), judged through the kill-gate; verdict doc.
+- **Done when:** the kill-gate verdict is recorded on cost-inclusive data; the pre-registration was committed first; the trial count is logged.
+- **Reference:** Part III Layer 2; P9.2 (event data); P6.3.
+
+### Phase-7 budget and stop discipline (operator-only; set in writing before P7.1 begins)
+
+Mirrors P2R.4. Committed to `docs/mechanisms/budget.md` **before P7.1 begins**, stating:
+- **Cycle cap:** a maximum number of mechanism studies before a hard reassessment (the three above are the pre-committed slate; P7.2 / P7.3 are conditional on earlier KILLs).
+- **Trial cap:** a maximum **cumulative** MLflow trial count across all mechanism studies, beyond which DSR is punitive enough that no realistic raw Sharpe clears it (P6.2 enforces the count).
+- **Stop / pivot criteria:** pre-committed in writing — e.g. "if no mechanism clears the kill-gate within the cycle cap, the mechanical-edge program stops (an honest negative, per Rule 7)." Conditional mechanisms (P7.2, P7.3) are pursued **only** if earlier ones KILL, and **each counts toward the cumulative trial budget.**
+- This is an **operator decision**, not an agent decision: the agent surfaces the trial / cycle count; the operator decides continue / stop.
+
+**GATE 7 (Part VI):** a mechanism clears the seven-point kill-gate on cost-inclusive data (→ Phase 8), **or** the budget's stop criterion engages with all mechanisms killed (→ honest stop, Rule 7). Phase 8 is unreachable until a mechanism passes the research smoke.
+
+---
+
+## PHASE 8 — CNC Execution Layer *(the deferred Stage-2 workstream)*
+
+Built **only if** a Phase-7 mechanism clears the research smoke (GATE 7). Completes the multi-day (delivery / CNC) execution path the original MIS-only architecture lacked (`FINDINGS.md` §6). **Note:** the **labeler already has a CNC hold mode** (added during the MIS-program close-out, with MIS preserved byte-for-byte); this phase completes the *rest* of the execution layer.
+
+#### P8.1 — CNC mode in the realistic backtester
+- **Goal:** multi-day holds with **no forced intraday square-off** in the P2.1 event-driven backtester.
+- **Depends on:** GATE 7.
+- **Deliverable:** a CNC holding mode in the `research/validation/` backtester (carry positions across sessions, overnight-gap handling, no 15:20 square-off), with MIS behaviour preserved.
+- **Done when:** a multi-day position is carried and settled correctly; the MIS path is byte-for-byte unchanged; tested.
+- **Reference:** `docs/FINDINGS.md` §6; Part III Layer 2.
+
+#### P8.2 — CNC mode in the reconciliation engines
+- **Goal:** the two-engine reconciliation (event-driven vs vectorized) agrees under multi-day holds.
+- **Depends on:** P8.1.
+- **Deliverable:** CNC support in both reconciliation engines so they agree to floating-point noise on a multi-day book.
+- **Done when:** the engines reconcile (to ~1e-11) on a CNC strategy; tested.
+- **Reference:** Part III Layer 2; P2.8.
+
+#### P8.3 — CNC delivery cost model (gated, replacing the 0.22% scalar)
+- **Goal:** a proper, gated CNC delivery cost model that **replaces the hard-coded 0.22% round-trip scalar.**
+- **Depends on:** P8.1.
+- **Deliverable:** an itemised CNC cost model — **0.10% STT on both legs** + 0.015% stamp (buy) + exchange / SEBI / GST — integrated into the cost path the kill-gate consumes (parity with the MIS `IndianCostModel`).
+- **Done when:** the model reproduces the ~0.22% round-trip **from first principles, not as a literal**, is config-driven (Rule 2), and the 0.22% scalar is removed from the codebase; tested.
+- **Reference:** `docs/FINDINGS.md` §4.1 cause (a); Part I Inviolable Rule 4; Part III Layer 2 cost model.
+
+#### P8.4 — End-to-end CNC validation through the kill-gate
+- **Goal:** the cleared mechanism re-judged on the full CNC execution layer.
+- **Depends on:** P8.1, P8.2, P8.3.
+- **Deliverable:** an end-to-end CNC run of the Phase-7 winner through the complete kill-gate apparatus (real cost, honest N, robustness battery, reconciliation), verdict recorded.
+- **Done when:** the kill-gate verdict on the full CNC path exists; if it still passes, the mechanism is execution-validated; if not, route to the budget.
+- **Reference:** Part III Layer 2; the seven-point kill-gate.
+
+**GATE 8 (Part VI):** the Phase-7 winner survives the full CNC execution layer through the kill-gate. (The capital / live phases remain the original Part IV gates, still gated on a passing research verdict — Inviolable Rule 1.)
+
+---
+
+## PHASE 9 — Proprietary Data Accrual *(runs in parallel from day one)*
+
+Slow-accruing inputs that change the pipeline's inputs from **commodity to proprietary** over 6–12 months, supporting later mechanism studies. Starts immediately and runs alongside Phases 6–8; it is the structural answer to the Cycle-3b constraint that historical depth / microstructure data is unbuyable at retail (`FINDINGS.md` §6).
+
+#### P9.1 — Forward-record live 5-level depth
+- **Goal:** establish the proprietary microstructure dataset by forward-recording Kite live 5-level depth into the archive, day over day — the data Cycle 3b proved cannot be **bought** historically at retail.
+- **Depends on:** the P1.2 live stream consumer (`TickStreamConsumer`, full-mode ticks + 5-depth) + the P1.3 archive.
+- **Deliverable:** a recording job that persists live `DepthSnapshot` streams to the immutable archive, partitioned for research; runs daily.
+- **Done when:** depth is recorded and reloadable for a research window; storage is bounded and idempotent; tested. *(Accrual is slow by nature — value compounds over months.)*
+- **Reference:** `docs/FINDINGS.md` §6; Part III Layer 1 (stream, storage); `docs/iteration_log/cycle-3b_decision.md`.
+
+#### P9.2 — Systematic event-reaction recording
+- **Goal:** accrue an earnings-surprise → reaction → drift dataset quarter over quarter, to feed P7.3 (PEAD).
+- **Depends on:** the P1.3 archive; an earnings-calendar / surprise source.
+- **Deliverable:** a recorder that captures, per earnings event, the surprise, the immediate reaction, and the subsequent drift window into a research-queryable store; runs each earnings season.
+- **Done when:** one earnings season is captured and queryable; the schema supports the P7.3 study; tested.
+- **Reference:** Part III Layer 1; P7.3.
+
+**GATE 9 (Part VI):** *(ongoing — no terminal gate)* proprietary depth and event-reaction datasets accrue continuously; their sufficiency is judged by the mechanism studies that consume them.
+
+---
+
+## Part-VI gate table
+
+*(Blueprint authored 2026-06-27; **no Part-VI subtask is built yet** — this is the plan of record. Mirrors Part V's style.)*
+
+| Phase | Goal | Depends on | Deliverable | Done when (gate) | Reference |
+|---|---|---|---|---|---|
+| **6** Mechanical-Edge Harness | non-directional specs plug into the existing kill-gate; honest auto-deflated trial count; pre-registration | Part III Layer 2; P2A.4 | `research/mechanisms/` spec layer + cumulative-N DSR wiring + pre-reg protocol | a spec runs through the unchanged kill-gate; DSR pulls live cumulative N; pre-reg enforced — GATE 6 | FINDINGS §1, §4.1; Rule 7 |
+| **7** Mechanism Studies | judge index-rebalance, then (conditional) pairs, then PEAD through the kill-gate, in sequence | GATE 6; reused survivorship membership | per-mechanism `StrategySpec` + kill-gate verdict docs + Phase-7 budget | a mechanism PASSES (→ Phase 8) or budget STOP with all killed — GATE 7 | FINDINGS §5; P2R.4; Layer 2 |
+| **8** CNC Execution Layer | complete the multi-day execution path for a cleared mechanism | GATE 7 | CNC backtester + reconciliation + gated CNC cost model + end-to-end kill-gate | winner survives the full CNC path through the kill-gate — GATE 8 | FINDINGS §4.1(a), §6; Rule 4 |
+| **9** Proprietary Data Accrual | accrue proprietary depth + event-reaction data over months | P1.2 / P1.3 stream + archive | live-depth recorder + event-reaction recorder | datasets accrue + are research-queryable (ongoing) — GATE 9 | FINDINGS §6; `cycle-3b_decision.md` |
+
+**Part-VI gate status:** Gate 6 ☐ · Gate 7 ☐ · Gate 8 ☐ · Gate 9 ☐ (ongoing) — *all todo; blueprint authoring only, no implementation started.*
+
+**Rules in force for all Part-VI work:** every Part I Engineering Ground Rule and Project-Specific Inviolable Rule applies unchanged — above all **Rule 1 (kill-gate sacred)**, **Rule 4 (honest cost modeling)**, **honest cumulative trial counting (P6.2)**, and **Rule 7 (most candidates die at the gate; an honest negative is a successful outcome).**
+
+---
+
+# PART VII — REFERENCE FILES
 
 The six detailed deep-dive documents (full rationale, formulas, and grounded sources) live in `docs/deep_dives/`:
 1. `01_DeepDive_Data_and_Feature_Layer.md`
