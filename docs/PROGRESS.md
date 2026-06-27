@@ -208,8 +208,8 @@ Pre-committed gate + budget: [`config/factor_default.yaml`](../config/factor_def
 
 | Date | Subtask | Status | Branch / commit | Tests | Notes |
 |---|---|---|---|---|---|
-| | P9.1 Forward-record live 5-level depth | ☐ todo | | | The data Cycle 3b proved unbuyable at retail; accrues over months via the P1.2 stream + P1.3 archive. |
-| | P9.2 Systematic event-reaction recording | ☐ todo | | | Earnings surprise → reaction → drift, to feed P7.3. |
+| 2026-06-27 | P9.1 Forward-record live 5-level depth | ☑ recorder built | `feat/p9-data-recorders` | 7 new | `data/recorders/depth.py`: `DepthRecorder` (buffers live `MarketUpdate` depth, bounded auto-flush) → `DepthSnapshotArchive` (immutable `symbol/date`-partitioned Parquet, flattened 5-level book, idempotent merge-by-timestamp). SDK-agnostic (consumes typed `DepthSnapshot`, never Kite). **Code complete + tested; accrual is the slow forward part** (needs the live stream + daily token over months — the data Cycle 3b proved unbuyable). |
+| 2026-06-27 | P9.2 Systematic event-reaction recording | ☑ recorder built | `feat/p9-data-recorders` | 6 new | `data/recorders/events.py`: `EarningsEvent` (surprise) + `EventReactionRecorder` (reads the P1.3 archive, computes pre/reaction/drift windows point-in-time) + `ParquetEventReactionStore` (research-queryable, idempotent). Schema = exactly what the P7.3 PEAD spec consumes. **Code complete + tested; needs an earnings-calendar/surprise feed (external) to populate.** |
 | | **GATE 9 (Part VI)** | ☐ ongoing | | | Datasets accrue + are research-queryable; sufficiency judged by the studies that consume them. |
 
 **Part-VI gate status:** Gate 6 ☑ · Gate 7 ☐ · Gate 8 ☐ · Gate 9 ☐ (ongoing). **Rules in force:** every Part I Engineering Ground Rule + Inviolable Rule — above all Rule 1 (kill-gate sacred), Rule 4 (honest cost modeling), honest cumulative trial counting (P6.2), and Rule 7 (an honest negative is a successful outcome).
