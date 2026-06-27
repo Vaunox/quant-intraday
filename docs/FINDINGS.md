@@ -374,3 +374,58 @@ budget discipline, and intellectual honesty held throughout. Authoritative Part-
 Cost basis throughout the daily/CNC honest runs: **0.22% round-trip** (CNC delivery). Honest
 cumulative trial count: **N = 23**. Universe: **56** survivorship-aware Nifty-50 names,
 `2021-06-24 → 2026-06-23`. CI at close: **1077 passed**, mypy strict clean, leakage suite green.
+
+---
+
+## 9. Phase 3X addendum — the cross-sectional factor program
+
+A third arc attacked the binding constraint from the other Grinold-Kahn axes — **monthly** frequency,
+**cross-sectional factors** (not directional bar prediction), and **breadth** (a survivorship-free
+Nifty-500-scale universe), judged on the **active information ratio vs benchmark** (a long-only
+book's absolute Sharpe is mostly market beta; skill lives in the active return).
+
+- **Apparatus (real, free, survivorship-correct).** A survivorship-free NSE **bhavcopy** daily panel
+  (2016–2024, 2221 days × 2695 names incl. delisted), 624 split/bonus back-adjustments, a
+  point-in-time liquidity-top-500 universe (1065 ever-eligible), price-only factors (momentum,
+  short-term reversal, low-vol, Amihud, residual-momentum), sector-neutral z-score composite,
+  top-quintile inverse-vol book with sector/name caps, CNC 0.22% cost, and the **benchmark-relative
+  seven-point kill-gate** (active IR ≥ 0.75).
+- **Baseline verdict — KILL.** Active IR **−0.815**, all CPCV paths negative, dedup t **−2.30**
+  (MLflow `p3x-factor-gate` run `af66c366…`). But the composite carries a **genuine +0.051
+  cross-sectional rank-IC** — momentum, low-vol, and residual-momentum all real in
+  survivorship-free Indian data; the edge is simply too weak to beat CNC cost and a demanding
+  equal-weight benchmark.
+- **P3X.4b — K-Means cluster-selection A/B (this session).** A look-ahead-free port of the one novel
+  idea from a teaching notebook (cluster the cross-section, pick the target cluster by an *ex-ante*
+  thesis rule, never by realized returns), judged through the **identical** gate. It **beats the
+  baseline** — active IR −0.82 → **+0.090**, every CPCV path flips positive, DSR 0.00 → 0.66 — and
+  selects genuinely different names (position overlap 0.24). But it **still KILLs**: +0.09 IR is ~8×
+  short of the +0.75 bar and the dedup t-stat (+0.25) is statistically insignificant; the gain is
+  also confounded with the thesis vector dropping the two IC-weak factors. **MARGINAL, not a pass**
+  (MLflow `p3x-factor-gate` run `26acef44…`, honest live N=3). See
+  [`iteration_log/p3x_cycle2_cluster_combiner.md`](iteration_log/p3x_cycle2_cluster_combiner.md).
+
+The factor arc confirms the project's recurring shape a third time: **real, measurable
+cross-sectional signal (IC +0.05) that is not economically tradeable** after honest costs at retail
+scale — and a clever selection refinement (clustering) moves the number but does not clear the bar.
+
+---
+
+## 10. Final project status (all three arcs)
+
+**The project is CLOSED. No live trading. $0 of capital risked.** Across **directional prediction**
+(Arc I, KILL — +0.148 ceiling), **three non-directional mechanics** (Arc II / Part VI, GATE 7 honest
+stop — pairs +0.425 strongest, still too weak; two data-gated), and **cross-sectional factors**
+(Arc III / Phase 3X, KILL — IC +0.051, cluster A/B marginal +0.09), **no strategy cleared the
+seven-point kill-gate at retail scale.** The strongest honestly-validated edge the entire program
+produced — cointegration pairs at **+0.42 net annualised Sharpe** — is real but economically
+negligible and statistically marginal.
+
+The durable asset is the **apparatus**: a complete, gated, point-in-time, leakage-tested research
+pipeline (1210 tests green, mypy strict, CNC + MIS cost models, CPCV/DSR/PBO, the seven-point
+kill-gate, the Part-VI mechanism harness with auto-deflated honest-N DSR + pre-registration, the
+Phase-9 proprietary-data recorders, and the survivorship-free data builders). It is sound, reusable,
+and re-pointable the moment new data (a reconstitution change-log, an earnings-surprise feed, accrued
+live depth, a point-in-time fundamentals source) or a new mechanism is defined. **The kill-gate did
+its job; every budget held; the negative is as informative as a positive would have been, and far
+cheaper than learning it with live capital.**

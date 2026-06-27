@@ -2204,3 +2204,28 @@ retail, Cycle 3b). Accrual is perpetual by design.
 **Next:** Part VI re-opens only with the gated data (a reconstitution change-log, an earnings feed),
 accrued live depth, or a newly-defined mechanism (pre-register under a fresh budget; plug a new
 `StrategySpec` into the unchanged kill-gate).
+
+---
+
+### 2026-06-27 — PROJECT CLOSE-OUT (all three research arcs consolidated to `main`)
+
+The Phase-3X factor arc's final subtask (**P3X.4b cluster-selection A/B**) was completed and the
+factor branch consolidated onto `main`, so `main` now carries **all three research arcs** in one
+tree (1210 tests green, mypy strict clean).
+
+**P3X.4b — cluster-selection combiner A/B (this session).** A look-ahead-free K-Means
+cluster-selection combiner (`research/factors/cluster_selection_combiner.py`; scikit-learn added as
+a declared dep), judged through the **identical** benchmark-relative gate as the baseline composite.
+k/thesis-weights pre-committed to `config/factor_default.yaml` before the run; honest DSR N pulled
+**live** from the MLflow run count; logged to `p3x-factor-gate` run `26acef44…`.
+**Verdict: MARGINAL — beats baseline (active IR −0.82 → +0.09, every CPCV path flips positive,
+0.24 name-overlap) but still KILLs** (~8× below the +0.75 bar, dedup t +0.25 insignificant; gain
+confounded with the thesis vector dropping the two IC-weak factors). 7 provided honesty tests +
+leakage suite green. Finding: `iteration_log/p3x_cycle2_cluster_combiner.md`.
+
+**Final status — PROJECT CLOSED, no live trading, $0 risked.** Three arcs, three honest negatives:
+Arc I (MIS-directional) KILL (+0.148 ceiling); Arc II (Part VI mechanical-edge) GATE 7 honest stop
+(pairs +0.425 strongest, still too weak; index-rebalance + PEAD data-gated); Arc III (Phase 3X
+factors) KILL (IC +0.051, cluster A/B marginal). No strategy is tradeable at retail scale; the
+apparatus is sound and re-pointable. Authoritative close-out: `docs/FINDINGS.md` §§8–10. README
+updated to the final tri-arc status.
