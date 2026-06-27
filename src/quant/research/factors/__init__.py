@@ -11,6 +11,7 @@ from quant.research.factors.combine import (
     WeightedComposite,
     sector_neutral_composite,
 )
+from quant.research.factors.corporate_actions import back_adjust_for_splits
 from quant.research.factors.errors import FactorError
 from quant.research.factors.gate import FactorGateVerdict, GateMetrics, evaluate_factor_gate
 from quant.research.factors.price_factors import (
@@ -35,6 +36,7 @@ __all__ = [
     "WeightedComposite",
     "amihud_illiquidity",
     "average_daily_value",
+    "back_adjust_for_splits",
     "evaluate_factor_gate",
     "liquidity_universe",
     "load_sector_map",
