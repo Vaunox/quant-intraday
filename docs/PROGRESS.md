@@ -91,7 +91,7 @@ Pre-committed gate + budget: [`config/factor_default.yaml`](../config/factor_def
 |---|---|---|---|---|
 | 2026-06-27 | P3X · gate config locked + scaffold | ◐ in-progress | `feat/p3x-cross-sectional-factors` | `config/factor_default.yaml` (§4 seven-point benchmark-relative gate + §2 contract + §5 budget, fixed before any run — Rule 1) + spec + data-track doc. |
 | | P3X.1 Nifty-500 point-in-time universe + backfill | ☐ blocked | | **Gated on the survivorship data decision** (vendor / accept-and-quantify / restricted sub-universe) + operator-provided PIT membership + fresh Kite token. |
-| | P3X.2 Price-only factor library + leakage tests | ◐ next | | `research/factors/`: momentum 12-1, ST reversal, low-vol, residual-mom, Amihud. Built + leakage-tested on synthetic panels (no data dep). |
+| 2026-06-27 | P3X.2 Price-only factor library + leakage tests | ☑ done | `feat/p3x-cross-sectional-factors` | `research/factors/price_factors.py`: momentum 12-1, short-term reversal, low-vol, residual momentum (rolling market-model), Amihud illiquidity — all causal per-symbol transforms; P1.8 leakage-covered (no-lookahead + no-future-correlation) on synthetic panels + hand-computed correctness tests. **1092 tests green**, mypy strict + ruff + black clean. Built on synthetic panels — no market data dependency. |
 | | P3X.3 Cross-sectional forward-return labeling | ☐ todo | | 21-session fwd return + decile rank; replaces triple-barrier. |
 | | P3X.4 Signal combination | ☐ todo | | Baseline = sector-neutral z-score equal-weight (0 params); ML = trial-charged. |
 | | P3X.5 Validation harness adaptation | ☐ todo | | Purge/embargo ≥ 21 sessions; metrics on active return; honest N; de-dup t-stat. |
