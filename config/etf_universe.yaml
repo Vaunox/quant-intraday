@@ -1,0 +1,40 @@
+# ETF baskets for the Phase 3T Rung-3 sweep (monthly ETF rotation).
+#
+# Operator decision (2026-07-01): run BOTH baskets side by side (not a swap) — the
+# spec-literal composition AND the already-ratified frozen basket. Each basket × {3a
+# classic-breakout, 3b relative-momentum} is a counted trial, so the §6 baseline ledger
+# grows from 6 → 8; carry that in both the primary and the conservative (+prior-23) DSR.
+#
+# All ETFs trade on the NSE cash segment (CNC, zero brokerage). The `role` tags the
+# independent risk driver each sleeve supplies (the diversification that makes trend-
+# following convex — SPEC §2 Rung 3). `exposure` is the human label.
+#
+# Data source (operator decision 2026-07-01): the operator backfills these from Kite
+# (daily) into the Parquet archive — `scripts/backfill_etf.py` — then verifies with
+# `scripts/check_etf_data.py`. This config is the single source of truth for the symbol
+# lists (Ground Rule 2); do not hand-type tickers.
+
+baskets:
+  # ---- The ratified etf-rotation basket (docs/etf_rotation/step1_liquidity_gate.md) ----
+  - name: frozen
+    sleeves:
+      - { symbol: NIFTYBEES,  exchange: NSE, exposure: "India large-cap",     role: equity_in }
+      - { symbol: BANKBEES,   exchange: NSE, exposure: "India banks",         role: equity_in }
+      - { symbol: MON100,     exchange: NSE, exposure: "US Nasdaq-100",       role: equity_us }
+      - { symbol: GOLDBEES,   exchange: NSE, exposure: "Gold",                role: gold }
+      - { symbol: SILVERBEES, exchange: NSE, exposure: "Silver",              role: silver }
+      - { symbol: LIQUIDBEES, exchange: NSE, exposure: "Cash (overnight)",    role: cash }
+
+  # ---- The SPEC §2 Rung-3 literal composition (Nifty50 / Next50 / gold / bond / intl) ----
+  # The bond sleeve is a G-Sec *duration* ETF (chosen over a cash-like or roll-down target-
+  # maturity leg) so the basket adds genuine cross-asset rate diversification the frozen
+  # basket's LIQUIDBEES cash leg does not. Indian G-Sec ETFs are thin — GSEC10IETF is
+  # PROVISIONAL pending the Kite verification run (history depth + real spread → P3T.4);
+  # fallbacks if Kite lacks clean history/liquidity: SETFGILT, LTGILTBEES.
+  - name: spec_literal
+    sleeves:
+      - { symbol: NIFTYBEES,  exchange: NSE, exposure: "Nifty 50",            role: equity_in }
+      - { symbol: JUNIORBEES, exchange: NSE, exposure: "Nifty Next 50",       role: equity_in }
+      - { symbol: GOLDBEES,   exchange: NSE, exposure: "Gold",                role: gold }
+      - { symbol: GSEC10IETF, exchange: NSE, exposure: "10y G-Sec (bond)",    role: bond }
+      - { symbol: MON100,     exchange: NSE, exposure: "US Nasdaq-100 (intl)", role: equity_us }
