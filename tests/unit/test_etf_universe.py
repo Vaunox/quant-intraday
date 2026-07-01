@@ -42,7 +42,7 @@ def test_loads_the_repo_config_with_both_baskets() -> None:
         "LIQUIDBEES",
     )
     spec = universe.basket("spec_literal")
-    assert spec.symbols == ("NIFTYBEES", "JUNIORBEES", "GOLDBEES", "GSEC10IETF", "MON100")
+    assert spec.symbols == ("NIFTYBEES", "JUNIORBEES", "GOLDBEES", "LTGILTBEES", "MON100")
     # The spec-literal basket carries a genuine bond (duration) sleeve.
     assert any(sleeve.role == "bond" for sleeve in spec.sleeves)
 
