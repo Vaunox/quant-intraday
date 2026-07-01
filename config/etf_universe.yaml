@@ -28,13 +28,16 @@ baskets:
   # ---- The SPEC §2 Rung-3 literal composition (Nifty50 / Next50 / gold / bond / intl) ----
   # The bond sleeve is a G-Sec *duration* ETF (chosen over a cash-like or roll-down target-
   # maturity leg) so the basket adds genuine cross-asset rate diversification the frozen
-  # basket's LIQUIDBEES cash leg does not. Indian G-Sec ETFs are thin — GSEC10IETF is
-  # PROVISIONAL pending the Kite verification run (history depth + real spread → P3T.4);
-  # fallbacks if Kite lacks clean history/liquidity: SETFGILT, LTGILTBEES.
+  # basket's LIQUIDBEES cash leg does not. LTGILTBEES (Nippon Long Term Gilt) is CONFIRMED by
+  # the P3T.2 Kite backfill: 2262 clean daily bars from 2016-07 — the longest + most complete
+  # gilt history on Kite, and (unlike the alternatives) it does not cap the basket's window.
+  # Rejected on the data: GSEC10IETF (only 760 bars from 2022-12 — would cap the whole basket
+  # at ~2022) and SETF10GILT (gappier, one >25% one-day tick). A pre-run data-availability
+  # choice, not a best-of-N search. See docs/turtle/P3T.2_etf_universe_and_data.md.
   - name: spec_literal
     sleeves:
-      - { symbol: NIFTYBEES,  exchange: NSE, exposure: "Nifty 50",            role: equity_in }
-      - { symbol: JUNIORBEES, exchange: NSE, exposure: "Nifty Next 50",       role: equity_in }
-      - { symbol: GOLDBEES,   exchange: NSE, exposure: "Gold",                role: gold }
-      - { symbol: GSEC10IETF, exchange: NSE, exposure: "10y G-Sec (bond)",    role: bond }
-      - { symbol: MON100,     exchange: NSE, exposure: "US Nasdaq-100 (intl)", role: equity_us }
+      - { symbol: NIFTYBEES,  exchange: NSE, exposure: "Nifty 50",              role: equity_in }
+      - { symbol: JUNIORBEES, exchange: NSE, exposure: "Nifty Next 50",         role: equity_in }
+      - { symbol: GOLDBEES,   exchange: NSE, exposure: "Gold",                  role: gold }
+      - { symbol: LTGILTBEES, exchange: NSE, exposure: "Long-term G-Sec (bond)", role: bond }
+      - { symbol: MON100,     exchange: NSE, exposure: "US Nasdaq-100 (intl)",  role: equity_us }
